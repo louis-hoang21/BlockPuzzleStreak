@@ -55,7 +55,7 @@ export default function RecordsScreen() {
           </View>
           <View style={styles.total}>
             <Text style={styles.totalValue}>{totalLinesCleared.toLocaleString()}</Text>
-            <Text style={styles.totalLabel}>{mode === 'classic' ? 'Tổng hàng' : 'Tổng nổ hũ'}</Text>
+            <Text style={styles.totalLabel}>{mode === 'classic' ? 'Tổng hàng' : 'Tổng hàng nổ'}</Text>
           </View>
           {mode === 'classic' && (
             <View style={styles.total}>

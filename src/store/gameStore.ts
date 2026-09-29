@@ -34,7 +34,7 @@ function fresh(mode: Mode): ModeState {
   const best = useRecordsStore.getState().byMode[mode].bestScore;
   const rng = createRng(seed ^ 0x9e3779b9).next;
   if (shouldPrefill(best, rng)) {
-    useNoticeStore.getState().push('Màn giải đố! Ghép khéo vào chỗ trống để nổ hũ');
+    useNoticeStore.getState().push('Màn giải đố! Ghép khéo vào chỗ trống để nổ hàng');
     return { game: newGame(seed, rotations, prefilledBoard(rng, prefillDifficulty(rng, best))), result: null };
   }
   return { game: newGame(seed, rotations), result: null };

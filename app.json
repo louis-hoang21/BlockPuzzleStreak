@@ -53,8 +53,20 @@
     "plugins": [
       "./plugins/withoutPushEntitlement",
       "expo-router",
-      "expo-secure-store",
-      "expo-audio",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "./plugins/withoutBackgroundAudio",
       [
         "expo-notifications",
         {}

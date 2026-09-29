@@ -1,4 +1,15 @@
-import { BlurMask, Canvas, createPicture, Group, Picture, rect, RoundedRect } from '@shopify/react-native-skia';
+import {
+  BlurMask,
+  Canvas,
+  createPicture,
+  Group,
+  Picture,
+  rect,
+  RoundedRect,
+  Skia,
+  TileMode,
+  vec,
+} from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo } from 'react';
 import {
   cancelAnimation,
@@ -8,6 +19,7 @@ import {
   withRepeat,
   withSequence,
   withTiming,
+  type SharedValue,
 } from 'react-native-reanimated';
 
 import cfg from '../../config/classic.json';
@@ -36,6 +48,68 @@ interface Props {
 }
 
 export const CLEAR_MS = 350;
+
+const SWEEP_START_S = 0.03;
+const POP_S = 0.1;
+const SPARK_LIFE_S = 0.25;
+const SPARKS_PER_CELL = 3;
+
+interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  start: number;
+}
+
+function popDelay(col: number, cols: number): number {
+  'worklet';
+  const step = (CLEAR_MS / 1000 - SWEEP_START_S - POP_S) / Math.max(1, cols - 1);
+  return SWEEP_START_S + col * step;
+}
+
+function ClearCell({
+  x,
+  y,
+  size,
+  color,
+  skin,
+  delay,
+  progress,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  color: number;
+  skin: Skin;
+  delay: number;
+  progress: SharedValue<number>;
+}) {
+  const phase = useDerivedValue(() => {
+    const t = (progress.value * CLEAR_MS) / 1000;
+    return t < delay ? -1 : Math.min(1, (t - delay) / POP_S);
+  });
+  const transform = useDerivedValue(() => {
+    const p = phase.value;
+    return [{ scale: p < 0 ? 1 : 1 + 0.25 * Math.sin(p * Math.PI) }];
+  });
+  const opacity = useDerivedValue(() => (phase.value < 0 ? 1 : 1 - phase.value));
+  const flash = useDerivedValue(() => (phase.value < 0 ? 0 : 0.75 * (1 - phase.value)));
+  return (
+    <Group origin={{ x: x + size / 2, y: y + size / 2 }} transform={transform} opacity={opacity}>
+      <Block x={x} y={y} size={size} color={color} skin={skin} />
+      <RoundedRect
+        x={x + 2}
+        y={y + 2}
+        width={size - 4}
+        height={size - 4}
+        r={size * 0.16}
+        color="white"
+        opacity={flash}
+      />
+    </Group>
+  );
+}
 
 function clearOpacityValue(p: number): number {
   'worklet';
@@ -103,7 +177,7 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
   useEffect(() => {
     if (!clearing) return;
     clearProgress.value = 0;
-    clearProgress.value = withTiming(1, { duration: CLEAR_MS });
+    clearProgress.value = withTiming(1, { duration: CLEAR_MS, easing: Easing.linear });
     if (clearing.lines >= 2) {
       frameFlash.value = withSequence(
         withTiming(1, { duration: 70 }),
@@ -113,14 +187,27 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
       );
     }
   }, [clearing, clearProgress, frameFlash]);
-  const clearScale = useDerivedValue(() => [
-    { scale: clearProgress.value < 0.35 ? 1 : 1 - (clearProgress.value - 0.35) / 0.65 },
-  ]);
-  const clearOpacity = useDerivedValue(() => clearOpacityValue(clearProgress.value));
-  const flashOpacity = useDerivedValue(() => {
-    const p = clearProgress.value;
-    return p < 0.35 ? 0.85 * (0.5 + 0.5 * Math.sin(p * 40)) : Math.max(0, 0.85 - (p - 0.35) * 2);
-  });
+  const sparks = useSharedValue<Spark[]>([]);
+  const sweepRows = useSharedValue<number[]>([]);
+  useEffect(() => {
+    if (!clearing) return;
+    const unit = cell / 38;
+    const list: Spark[] = [];
+    for (const { row, col } of clearing.cells) {
+      for (let i = 0; i < SPARKS_PER_CELL; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        list.push({
+          x: boardX + (col + 0.5) * cell,
+          y: boardY + (row - hidden + 0.5) * cell,
+          vx: Math.cos(angle) * 70 * unit,
+          vy: Math.sin(angle) * 70 * unit - 40 * unit,
+          start: popDelay(col, cols),
+        });
+      }
+    }
+    sparks.value = list;
+    sweepRows.value = clearing.rows.map((r) => boardY + (r - hidden) * cell);
+  }, [clearing, sparks, sweepRows, boardX, boardY, cell, hidden, cols]);
 
   const previewRows = useMemo(() => {
     if (!active) return [];
@@ -162,9 +249,38 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
     const area: Box = [boardX, boardY, boardW, boardH];
     const pending = previewBoxes.value;
     const bursting = clearBoxes.value;
+    const t = (clearProgress.value * CLEAR_MS) / 1000;
+    const live = clearProgress.value < 1;
+    const dots = sparks.value;
+    const rowsY = sweepRows.value;
     return createPicture((canvas) => {
       drawRainbowBoxes(canvas, pending, phase, area, cell);
       if (strength > 0) drawRainbowBoxes(canvas, bursting, phase, area, cell, strength);
+      if (!live) return;
+      const sweepEnd = CLEAR_MS / 1000 - POP_S;
+      if (t < sweepEnd + POP_S) {
+        const sx = boardX + Math.min(1, t / sweepEnd) * boardW;
+        const band = cell * 1.2;
+        const shader = Skia.Shader.MakeLinearGradient(
+          vec(sx - band, 0),
+          vec(sx, 0),
+          [Skia.Color('rgba(255,255,255,0)'), Skia.Color('rgba(255,255,255,0.9)')],
+          null,
+          TileMode.Clamp,
+        );
+        const paint = Skia.Paint();
+        paint.setShader(shader);
+        for (const y of rowsY) canvas.drawRect(Skia.XYWHRect(sx - band, y, band + 4, cell), paint);
+      }
+      const dot = Skia.Paint();
+      dot.setColor(Skia.Color('#FFFFFF'));
+      for (const d of dots) {
+        const life = t - d.start;
+        if (life < 0 || life > SPARK_LIFE_S) continue;
+        const k = life / SPARK_LIFE_S;
+        dot.setAlphaf(1 - k);
+        canvas.drawCircle(d.x + d.vx * life, d.y + d.vy * life, (cell / 12) * (1 - k * 0.5), dot);
+      }
     });
   });
 
@@ -219,32 +335,19 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
         {activeCells.map(([r, c]) => (
           <Block key={`a${r}-${c}`} x={boardX + c * cell} y={yOf(r)} size={cell} color={color} skin={skin} />
         ))}
-        {clearing && (
-          <Group opacity={clearOpacity}>
-            {clearing.cells.map(({ row, col, color: cc }) => {
-              const x = boardX + col * cell;
-              const y = yOf(row);
-              return (
-                <Group
-                  key={`${clearing.id}-${row}-${col}`}
-                  origin={{ x: x + cell / 2, y: y + cell / 2 }}
-                  transform={clearScale}
-                >
-                  <Block x={x} y={y} size={cell} color={cc} skin={skin} />
-                  <RoundedRect
-                    x={x + 2}
-                    y={y + 2}
-                    width={cell - 4}
-                    height={cell - 4}
-                    r={cell * 0.16}
-                    color="white"
-                    opacity={flashOpacity}
-                  />
-                </Group>
-              );
-            })}
-          </Group>
-        )}
+        {clearing &&
+          clearing.cells.map(({ row, col, color: cc }) => (
+            <ClearCell
+              key={`${clearing.id}-${row}-${col}`}
+              x={boardX + col * cell}
+              y={yOf(row)}
+              size={cell}
+              color={cc}
+              skin={skin}
+              delay={popDelay(col, cols)}
+              progress={clearProgress}
+            />
+          ))}
         <Picture picture={glow} />
       </Group>
 

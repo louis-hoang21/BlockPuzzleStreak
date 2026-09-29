@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 const DAYS_AHEAD = 7;
 
 const MESSAGES = [
-  'JackPot đang chờ bạn. Vào nổ hũ nhé!',
+  'Chuỗi Nổ đang chờ bạn. Vào nổ vài hàng nhé!',
   'Còn mốc điểm chưa mở khoá đấy. Thử phá kỷ lục hôm nay?',
   'Một ván nhanh trước khi nghỉ ngơi?',
   'Combo x3 mở skin mới. Bạn đạt được chưa?',

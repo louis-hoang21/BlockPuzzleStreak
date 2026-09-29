@@ -20,7 +20,7 @@ const STEPS: Step[] = [
   {
     icon: 'square.grid.3x3.fill',
     title: 'Lấp đầy hàng hoặc cột',
-    body: 'Hàng hoặc cột đầy sẽ nổ hũ và ghi điểm. Nổ nhiều hàng/cột cùng lúc, hoặc nổ liên tiếp để nhân combo.',
+    body: 'Hàng hoặc cột đầy sẽ nổ và ghi điểm. Nổ nhiều hàng/cột cùng lúc, hoặc nổ liên tiếp để nhân combo.',
   },
   {
     icon: 'arrow.clockwise',

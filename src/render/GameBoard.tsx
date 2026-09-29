@@ -1,4 +1,4 @@
-import { BlurMask, Canvas, createPicture, Group, Picture, RoundedRect } from '@shopify/react-native-skia';
+import { BlurMask, Canvas, createPicture, Group, Picture, RoundedRect, Skia } from '@shopify/react-native-skia';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
@@ -30,7 +30,20 @@ export interface ClearingCell {
 export interface ClearEvent {
   id: number;
   cells: ClearingCell[];
+  rows: number[];
+  cols: number[];
   lines: number;
+}
+
+interface Shard {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  rot: number;
+  spin: number;
 }
 
 interface Props {
@@ -80,7 +93,13 @@ function previewAt(
   return { valid: true, rows, cols };
 }
 
-const CLEAR_MS = 320;
+const BURST_MS = 900;
+const FLASH_S = 0.2;
+const SHARD_LIFE_S = 0.7;
+const SHARDS_PER_CELL = 6;
+const GRAVITY = 640;
+const RAINBOW_HOLD_S = 0.35;
+const RAINBOW_FADE_S = 0.3;
 const SPIN_MS = 180;
 const FLASH_COLOR = '#FFE680';
 
@@ -254,10 +273,36 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
 
   const clearProgress = useSharedValue(1);
   const frameFlash = useSharedValue(0);
+  const shards = useSharedValue<Shard[]>([]);
+  const burstBoxes = useSharedValue<Box[]>([]);
   useEffect(() => {
     if (!clearing) return;
+    const unit = cell / 38;
+    const list: Shard[] = [];
+    for (const { row, col, color } of clearing.cells) {
+      const base = skin.colors[color % skin.colors.length].base;
+      for (let i = 0; i < SHARDS_PER_CELL; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = (80 + Math.random() * 160) * unit;
+        list.push({
+          x: boardX + (col + 0.5) * cell,
+          y: boardY + (row + 0.5) * cell,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 120 * unit,
+          size: (5 + Math.random() * 6) * unit,
+          color: base,
+          rot: Math.random() * 360,
+          spin: (Math.random() - 0.5) * 600,
+        });
+      }
+    }
+    shards.value = list;
+    burstBoxes.value = [
+      ...clearing.rows.map((r): Box => [boardX, boardY + r * cell, boardSize, cell]),
+      ...clearing.cols.map((c): Box => [boardX + c * cell, boardY, cell, boardSize]),
+    ];
     clearProgress.value = 0;
-    clearProgress.value = withTiming(1, { duration: CLEAR_MS });
+    clearProgress.value = withTiming(1, { duration: BURST_MS, easing: Easing.linear });
     if (clearing.lines >= 2) {
       frameFlash.value = withSequence(
         withTiming(1, { duration: 70 }),
@@ -266,10 +311,40 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
         withTiming(0, { duration: 380 }),
       );
     }
-  }, [clearing, clearProgress, frameFlash]);
-  const clearScale = useDerivedValue(() => [{ scale: 1 - clearProgress.value }]);
-  const clearOpacity = useDerivedValue(() => 1 - clearProgress.value);
-  const flashOpacity = useDerivedValue(() => Math.max(0, 0.7 - clearProgress.value * 1.6));
+  }, [clearing, clearProgress, frameFlash, shards, burstBoxes, skin, boardX, boardY, boardSize, cell]);
+  const clearOpacity = useDerivedValue(() => {
+    const t = (clearProgress.value * BURST_MS) / 1000;
+    return t < FLASH_S ? 1 : 0;
+  });
+  const flashOpacity = useDerivedValue(() => {
+    const t = (clearProgress.value * BURST_MS) / 1000;
+    return t < FLASH_S ? 0.5 + 0.5 * Math.sin(t * 50) : 0;
+  });
+  const burst = useDerivedValue(() => {
+    const p = clearProgress.value;
+    const t = (p * BURST_MS) / 1000;
+    const list = shards.value;
+    const boxes = burstBoxes.value;
+    return createPicture((canvas) => {
+      if (p >= 1) return;
+      const glow = t < RAINBOW_HOLD_S ? 1 : Math.max(0, 1 - (t - RAINBOW_HOLD_S) / RAINBOW_FADE_S);
+      if (glow > 0) drawRainbowBoxes(canvas, boxes, t, [boardX, boardY, boardSize, boardSize], cell, glow);
+      const life = t - FLASH_S;
+      if (life <= 0 || life >= SHARD_LIFE_S) return;
+      const paint = Skia.Paint();
+      for (const sh of list) {
+        paint.setColor(Skia.Color(sh.color));
+        paint.setAlphaf(1 - life / SHARD_LIFE_S);
+        const x = sh.x + sh.vx * life;
+        const y = sh.y + sh.vy * life + 0.5 * GRAVITY * (cell / 38) * life * life;
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(sh.rot + sh.spin * life, 0, 0);
+        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(-sh.size / 2, -sh.size / 2, sh.size, sh.size), 2, 2), paint);
+        canvas.restore();
+      }
+    });
+  });
 
   const cells = useMemo(
     () =>
@@ -319,11 +394,7 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
               const x = boardX + col * cell;
               const y = boardY + row * cell;
               return (
-                <Group
-                  key={`${clearing.id}-${row}-${col}`}
-                  origin={{ x: x + cell / 2, y: y + cell / 2 }}
-                  transform={clearScale}
-                >
+                <Group key={`${clearing.id}-${row}-${col}`}>
                   <Block x={x} y={y} size={cell} color={color} skin={skin} />
                   <RoundedRect
                     x={x + 2}
@@ -339,6 +410,8 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
             })}
           </Group>
         )}
+
+        <Picture picture={burst} />
 
         <Group opacity={frameFlash}>
           <RoundedRect

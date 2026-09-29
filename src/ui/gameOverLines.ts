@@ -19,7 +19,7 @@ const SO_CLOSE: Line[] = [
 const ENCOURAGE: Line[] = [
   () => 'Ván sau chắc chắn ngon hơn!',
   () => 'Khởi động xong rồi, giờ mới chơi thật nè.',
-  () => 'Xếp khéo một chút là nổ hũ liên tục đó.',
+  () => 'Xếp khéo một chút là nổ liên tục đó.',
   () => 'Thử giữ combo lâu hơn xem, điểm tăng vù vù.',
   () => 'Ai cũng có ngày xui. Ván nữa nào!',
 ];

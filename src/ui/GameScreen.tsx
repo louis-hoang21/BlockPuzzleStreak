@@ -12,6 +12,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 import { comboSfx, initSfx, playSfx } from '../audio/sfx';
 import { markReviewPromptShown, requestStoreReview, reviewPromptDelay } from '../review/reviewPrompt';
@@ -61,7 +62,8 @@ const LINE_ICONS = {
   tease: { name: 'face.smiling.inverse', color: '#FFD84D' },
 } as const satisfies Record<LineTone, { name: SFSymbol; color: string }>;
 const TOAST_MS = 1400;
-const SCORE_POPUP_MS = 1600;
+const SCORE_POPUP_MS = 2200;
+const SCORE_HOLD = 0.7;
 const BADGE_PULSE_MS = 3000;
 const BADGE_PULSES = 6;
 const STAGE_SFX_DELAY_MS = 350;
@@ -194,7 +196,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
       const id = ++eventId.current;
       const { lines, combo, perfectClearPoints, total } = result.score;
       if (lines > 0) {
-        setClearing({ id, cells: clearedCells(result), lines });
+        setClearing({ id, cells: clearedCells(result), rows: result.cleared.rows, cols: result.cleared.cols, lines });
         setPopup({ id, points: total, label: popupLabel(result) });
         if (combo >= 2) setComboEvent({ id, combo });
         if (lines >= 2) setMultiLines({ id, lines });
@@ -318,6 +320,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
         },
       ]}
     >
+      <StatusBar style={(stageLook?.tone ?? theme.tone) === 'light' ? 'dark' : 'light'} />
       <StageBackground color={stageLook?.background ?? null} />
       {theme.backdrop && <ThemeBackdrop kind={theme.backdrop} />}
       <View style={styles.header}>
@@ -437,7 +440,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
           result={result}
           losses={losses}
           stats={[
-            { label: 'Nổ hũ', value: game.stats.linesCleared },
+            { label: 'Hàng nổ', value: game.stats.linesCleared },
             { label: 'Combo cao nhất', value: game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–' },
             { label: 'Lượt đặt', value: game.stats.placements },
           ]}
@@ -675,10 +678,15 @@ export function ScorePopup({ popup, top }: { popup: Popup; top: number }) {
   useEffect(() => {
     progress.value = withTiming(1, { duration: SCORE_POPUP_MS });
   }, [progress]);
-  const style = useAnimatedStyle(() => ({
-    opacity: progress.value < 0.8 ? 1 : 1 - (progress.value - 0.8) / 0.2,
-    transform: [{ translateY: -50 * progress.value }, { scale: 0.8 + Math.min(progress.value * 8, 1) * 0.2 }],
-  }));
+  const style = useAnimatedStyle(() => {
+    const p = progress.value;
+    const out = p < SCORE_HOLD ? 0 : (p - SCORE_HOLD) / (1 - SCORE_HOLD);
+    const pop = p < 0.04 ? 0.6 + (p / 0.04) * 0.55 : p < 0.08 ? 1.15 - ((p - 0.04) / 0.04) * 0.15 : 1;
+    return {
+      opacity: 1 - out,
+      transform: [{ translateY: -40 * out }, { scale: pop }],
+    };
+  });
   return (
     <Animated.View pointerEvents="none" style={[styles.popup, { top }, style]}>
       <Text style={styles.popupPoints}>+{popup.points.toLocaleString()}</Text>
@@ -813,7 +821,7 @@ export function RecordBanner({ top }: { top: number }) {
 export function LinesBanner({ lines, top }: { lines: number; top: number }) {
   return (
     <PopBanner top={top}>
-      <Text style={styles.bannerWord}>Nổ hũ </Text>
+      <Text style={styles.bannerWord}>Nổ </Text>
       <Text style={[styles.bannerBig, { color: lines >= 3 ? '#FF4D6D' : COLORS.accent }]}>x{lines}!</Text>
     </PopBanner>
   );

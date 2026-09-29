@@ -7,6 +7,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
+import { StatusBar } from 'expo-status-bar';
 
 import cfg from '../../config/classic.json';
 import { comboSfx, initSfx, playSfx } from '../audio/sfx';
@@ -240,7 +241,10 @@ export function ClassicScreen() {
         next.active !== prev.active ||
         next.cells !== prev.cells ||
         next.hold !== prev.hold ||
-        next.over !== prev.over
+        next.over !== prev.over ||
+        next.score !== prev.score ||
+        next.level !== prev.level ||
+        next.lines !== prev.lines
       ) {
         setView(next);
       }
@@ -394,6 +398,7 @@ export function ClassicScreen() {
         { backgroundColor: theme.background, paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
     >
+      <StatusBar style={(stageLook?.tone ?? theme.tone) === 'light' ? 'dark' : 'light'} />
       <StageBackground color={stageLook?.background ?? null} />
       {theme.backdrop && <ThemeBackdrop kind={theme.backdrop} />}
       <ClassicHeader
@@ -413,6 +418,9 @@ export function ClassicScreen() {
             <Animated.View style={[StyleSheet.absoluteFill, shakeStyle]}>
               <ClassicBoard layout={layout} state={view} clearing={clearing} theme={theme} skin={skin} />
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
                 style={[
                   styles.sideLabel,
                   { left: layout.sideX, top: layout.holdY - layout.labelH, width: layout.sideW, color: hud.textDim },
@@ -421,6 +429,9 @@ export function ClassicScreen() {
                 Giữ
               </Text>
               <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
                 style={[
                   styles.sideLabel,
                   { left: layout.sideX, top: layout.nextY - layout.labelH, width: layout.sideW, color: hud.textDim },

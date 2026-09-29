@@ -49,3 +49,6 @@ config/giftCodes.json
 
 # planning notes (kept locally, not committed)
 PLAN.md
+
+# App Store screenshots (large PNGs, uploaded to App Store Connect, not committed)
+store/
