@@ -10,6 +10,7 @@ export interface Settings {
   reminderHour: number;
   reminderMinute: number;
   onboarded: boolean;
+  classicButtons: boolean;
 }
 
 const KEY = 'settings';
@@ -23,10 +24,11 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderHour: 19,
   reminderMinute: 0,
   onboarded: false,
+  classicButtons: false,
 };
 
 export function loadSettings(): Settings {
-  return readJson<Settings>(KEY, DEFAULT_SETTINGS);
+  return { ...DEFAULT_SETTINGS, ...readJson<Partial<Settings>>(KEY, DEFAULT_SETTINGS) };
 }
 
 export function saveSettings(settings: Settings) {

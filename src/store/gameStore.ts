@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { hasMove, newGame, placePiece, rotatePiece, type GameState, type PlaceResult } from '../core/game';
-import type { Mode } from '../core/modes';
+import type { BoardMode as Mode } from '../core/modes';
 import { prefillDifficulty, prefilledBoard, shouldPrefill } from '../core/prefill';
 import { createRng } from '../core/rng';
 import { loadCurrentGame, saveCurrentGame } from '../persistence/currentGame';
@@ -9,7 +9,7 @@ import { useNoticeStore } from './noticeStore';
 import { useProgressStore } from './progressStore';
 import { useRecordsStore, type GameResult } from './recordsStore';
 
-export type { Mode } from '../core/modes';
+export type { BoardMode as Mode } from '../core/modes';
 
 interface ModeState {
   game: GameState;

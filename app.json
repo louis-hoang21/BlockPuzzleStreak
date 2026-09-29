@@ -3,7 +3,7 @@
     "name": "Block Puzzle: Streak",
     "slug": "block-puzzle-streak",
     "scheme": "blockpuzzlestreak",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -44,7 +44,8 @@
             ]
           }
         ]
-      }
+      },
+      "appStoreUrl": "https://apps.apple.com/app/id6816928205"
     },
     "splash": {
       "image": "./assets/splash-icon.png",

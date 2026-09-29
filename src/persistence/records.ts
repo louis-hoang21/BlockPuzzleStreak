@@ -6,29 +6,34 @@ export interface Records {
   totalLinesCleared: number;
   gamesPlayed: number;
   gamesBelowBest: number;
+  bestLevel: number;
 }
 
 const key = (mode: Mode) => `records.${mode}`;
 const LEGACY_KEY = 'records';
-const EMPTY: Records = { bestScore: 0, totalLinesCleared: 0, gamesPlayed: 0, gamesBelowBest: 0 };
+const EMPTY: Records = { bestScore: 0, totalLinesCleared: 0, gamesPlayed: 0, gamesBelowBest: 0, bestLevel: 0 };
 
 export function loadRecords(mode: Mode): Records {
   if (mode === 'jackpot' && storage.getString(key(mode)) === undefined && storage.getString(LEGACY_KEY) !== undefined) {
     const legacy = readJson(LEGACY_KEY, EMPTY);
     saveRecords(mode, legacy);
-    return legacy;
+    return { ...EMPTY, ...legacy };
   }
-  return readJson(key(mode), EMPTY);
+  return { ...EMPTY, ...readJson<Partial<Records>>(key(mode), EMPTY) };
 }
 
-export function saveRecords(mode: Mode, { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest }: Records) {
-  writeJson(key(mode), { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest });
+export function saveRecords(
+  mode: Mode,
+  { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest, bestLevel }: Records,
+) {
+  writeJson(key(mode), { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest, bestLevel });
 }
 
 export function addGame(
   records: Records,
   score: number,
   lines: number,
+  level = 0,
 ): { records: Records; newBest: boolean; tiedBest: boolean } {
   return {
     records: {
@@ -36,6 +41,7 @@ export function addGame(
       totalLinesCleared: records.totalLinesCleared + lines,
       gamesPlayed: records.gamesPlayed + 1,
       gamesBelowBest: records.gamesBelowBest + (score < records.bestScore ? 1 : 0),
+      bestLevel: Math.max(records.bestLevel, level),
     },
     newBest: score > records.bestScore,
     tiedBest: score > 0 && score === records.bestScore,

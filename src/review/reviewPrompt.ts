@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import * as StoreReview from 'expo-store-review';
+import { Linking } from 'react-native';
 
 import balance from '../../config/balance.json';
 import { KEYCHAIN_OPTIONS } from '../persistence/storage';
@@ -22,6 +23,11 @@ export function markReviewPromptShown() {
 
 export async function requestStoreReview() {
   try {
+    const url = StoreReview.storeUrl();
+    if (url) {
+      await Linking.openURL(`${url}${url.includes('?') ? '&' : '?'}action=write-review`);
+      return;
+    }
     if (await StoreReview.isAvailableAsync()) await StoreReview.requestReview();
   } catch {}
 }

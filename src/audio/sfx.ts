@@ -4,6 +4,7 @@ import { useSettingsStore } from '../store/settingsStore';
 
 const SOURCES = {
   place: require('../../assets/sounds/place.m4a'),
+  drop: require('../../assets/sounds/drop.m4a'),
   clear: require('../../assets/sounds/clear.m4a'),
   combo2: require('../../assets/sounds/combo2.m4a'),
   combo3: require('../../assets/sounds/combo3.m4a'),

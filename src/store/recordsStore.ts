@@ -11,13 +11,13 @@ export interface GameResult {
 
 interface RecordsStore {
   byMode: Record<Mode, Records>;
-  submit: (mode: Mode, score: number, lines: number) => GameResult;
+  submit: (mode: Mode, score: number, lines: number, level?: number) => GameResult;
 }
 
 export const useRecordsStore = create<RecordsStore>()((set, get) => ({
   byMode: Object.fromEntries(MODES.map((m) => [m.id, loadRecords(m.id)])) as Record<Mode, Records>,
-  submit: (mode, score, lines) => {
-    const result = addGame(get().byMode[mode], score, lines);
+  submit: (mode, score, lines, level) => {
+    const result = addGame(get().byMode[mode], score, lines, level);
     saveRecords(mode, result.records);
     set({ byMode: { ...get().byMode, [mode]: result.records } });
     return { score, newBest: result.newBest, tiedBest: result.tiedBest };

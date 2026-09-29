@@ -33,7 +33,7 @@ function Row({ label, value, onChange }: { label: string; value: boolean; onChan
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const { sound, haptics, reminder, reminderHour, reminderMinute, update } = useSettingsStore();
+  const { sound, haptics, classicButtons, reminder, reminderHour, reminderMinute, update } = useSettingsStore();
   const [blocked, setBlocked] = useState(false);
 
   const toggleReminder = async (on: boolean) => {
@@ -67,6 +67,12 @@ export default function SettingsScreen() {
           <Row label="Âm thanh" value={sound} onChange={(v) => update({ sound: v })} />
           <View style={styles.divider} />
           <Row label="Rung" value={haptics} onChange={(v) => update({ haptics: v })} />
+          <View style={styles.divider} />
+          <Row
+            label="Nút điều khiển (Cổ điển)"
+            value={classicButtons}
+            onChange={(v) => update({ classicButtons: v })}
+          />
         </View>
 
         <View style={styles.card}>

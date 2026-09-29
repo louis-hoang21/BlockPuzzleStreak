@@ -36,12 +36,12 @@ import { COLORS, hudColors, rotationBadgeColor, skinById, STAGE_LOOKS, themeById
 import { useGameStore, type Mode } from '../store/gameStore';
 import { useNoticeStore, type RewardKind } from '../store/noticeStore';
 import { useProgressStore } from '../store/progressStore';
-import { useRecordsStore } from '../store/recordsStore';
+import { useRecordsStore, type GameResult } from '../store/recordsStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { gameOverLine, type LineTone } from './gameOverLines';
 import { Onboarding } from './Onboarding';
 
-interface Popup {
+export interface Popup {
   id: number;
   points: number;
   label: string | null;
@@ -83,7 +83,7 @@ const REWARD_ICONS = {
 } as const satisfies Record<RewardKind, { name: SFSymbol; color: string; title: string }>;
 const RECORD_FIREWORKS_GAP_MS = 1100;
 const RECORD_SFX_DELAY_MS = 500;
-const COMBO_SFX_DELAY_MS = 120;
+export const COMBO_SFX_DELAY_MS = 120;
 const COMBO_COLORS = ['#4FC3F7', '#7BD84F', '#FFD84D', '#FF8A1F', '#FF4D6D', '#FF5FD2'];
 
 function clearedCells(result: PlaceResult): ClearingCell[] {
@@ -154,12 +154,9 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const bestStyle = useAnimatedStyle(() => ({
     transform: [{ scale: bestPulse.value }],
   }));
-  const [showGameOver, setShowGameOver] = useState(false);
-  const [showReview, setShowReview] = useState(false);
   const [fireworks, setFireworks] = useState<number | null>(null);
-  const [recordFireworks, setRecordFireworks] = useState<number | null>(null);
-  const screen = useWindowDimensions();
   const eventId = useRef(0);
+  const over = useGameOverFlow(game.over, result);
 
   useEffect(() => {
     initSfx();
@@ -181,44 +178,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const stageLook = stage ? STAGE_LOOKS[stage] : null;
   const hud = hudColors(stageLook?.tone ?? theme.tone);
 
-  useEffect(() => {
-    if (!game.over) return;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const t = setTimeout(() => {
-      const ended = useGameStore.getState().modes[mode].result;
-      if (ended?.newBest) {
-        hapticCelebrate();
-        playSfx('newRecord');
-        setRecordFireworks(++eventId.current);
-        timers.push(setTimeout(() => setRecordFireworks(++eventId.current), RECORD_FIREWORKS_GAP_MS));
-      } else {
-        hapticGameOver();
-        playSfx(ended?.tiedBest ? 'tieRecord' : 'gameOver');
-      }
-      setShowGameOver(true);
-      const delay = reviewPromptDelay();
-      if (delay !== null) {
-        timers.push(
-          setTimeout(() => {
-            markReviewPromptShown();
-            setShowReview(true);
-          }, delay),
-        );
-      }
-    }, GAME_OVER_DELAY_MS);
-    return () => {
-      clearTimeout(t);
-      timers.forEach(clearTimeout);
-    };
-  }, [game.over, mode]);
-
   const losses = useRecordsStore((s) => s.byMode[mode].gamesBelowBest);
-  const cardLook = result?.newBest ? CARD_LOOKS.newBest : result?.tiedBest ? CARD_LOOKS.tied : CARD_LOOKS.below;
-  const overLine = useMemo(
-    () => (result ? gameOverLine(game.score, best, result.newBest, losses) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [result, game.score, best],
-  );
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -335,8 +295,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
 
   const restart = () => {
     hapticTap();
-    setShowGameOver(false);
-    setShowReview(false);
+    over.reset();
     setClearing(null);
     setPopup(null);
     setComboEvent(null);
@@ -344,7 +303,6 @@ export function GameScreen({ mode }: { mode: Mode }) {
     setRecordEvent(null);
     setNiceEvent(null);
     setFireworks(null);
-    setRecordFireworks(null);
     startIn(mode);
   };
 
@@ -471,58 +429,149 @@ export function GameScreen({ mode }: { mode: Mode }) {
         )}
       </View>
 
-      {showGameOver && (
-        <View style={styles.overlay}>
-          <View style={[styles.card, { backgroundColor: cardLook.bg }]}>
-            <Text style={styles.cardTitle}>Hết chiêuuuu</Text>
-            {result?.newBest && <NewBestBadge />}
-            <Text style={styles.cardScore} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-              {game.score.toLocaleString()}
-            </Text>
-            <Text style={styles.cardSub}>Kỷ lục: {best.toLocaleString()}</Text>
-            {overLine && (
-              <View style={styles.overLineBox}>
-                <SymbolView
-                  name={LINE_ICONS[overLine.tone].name}
-                  size={34}
-                  tintColor={LINE_ICONS[overLine.tone].color}
-                  style={styles.overLineIcon}
-                />
-                <Text style={styles.overLine}>{overLine.text}</Text>
-              </View>
-            )}
-            <View style={styles.statsRow}>
-              <Stat label="Nổ hũ" value={game.stats.linesCleared} />
-              <Stat label="Combo cao nhất" value={game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–'} />
-              <Stat label="Lượt đặt" value={game.stats.placements} />
-            </View>
-            <Pressable style={[styles.primaryButton, { backgroundColor: cardLook.button }]} onPress={restart}>
-              <Text style={[styles.primaryText, { color: cardLook.buttonText }]}>Chơi lại</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-              <Text style={styles.secondaryText}>Về menu</Text>
-            </Pressable>
-          </View>
-          {recordFireworks !== null && <Fireworks id={recordFireworks} width={screen.width} height={screen.height} />}
-        </View>
-      )}
-
-      {showGameOver && showReview && (
-        <ReviewPrompt
-          onRate={() => {
-            hapticTap();
-            setShowReview(false);
-            requestStoreReview();
-          }}
-          onLater={() => {
-            hapticTap();
-            setShowReview(false);
-          }}
+      {over.showGameOver && (
+        <GameOverOverlay
+          score={game.score}
+          best={best}
+          result={result}
+          losses={losses}
+          stats={[
+            { label: 'Nổ hũ', value: game.stats.linesCleared },
+            { label: 'Combo cao nhất', value: game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–' },
+            { label: 'Lượt đặt', value: game.stats.placements },
+          ]}
+          recordFireworks={over.recordFireworks}
+          showReview={over.showReview}
+          onCloseReview={() => over.setShowReview(false)}
+          onRestart={restart}
         />
       )}
 
       {!onboarded && <Onboarding onDone={() => useSettingsStore.getState().update({ onboarded: true })} />}
     </View>
+  );
+}
+
+export function useGameOverFlow(isOver: boolean, result: GameResult | null) {
+  const [showGameOver, setShowGameOver] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [recordFireworks, setRecordFireworks] = useState<number | null>(null);
+  const ids = useRef(0);
+  useEffect(() => {
+    if (!isOver) return;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const t = setTimeout(() => {
+      if (result?.newBest) {
+        hapticCelebrate();
+        playSfx('newRecord');
+        setRecordFireworks(++ids.current);
+        timers.push(setTimeout(() => setRecordFireworks(++ids.current), RECORD_FIREWORKS_GAP_MS));
+      } else {
+        hapticGameOver();
+        playSfx(result?.tiedBest ? 'tieRecord' : 'gameOver');
+      }
+      setShowGameOver(true);
+      const delay = reviewPromptDelay();
+      if (delay !== null) {
+        timers.push(
+          setTimeout(() => {
+            markReviewPromptShown();
+            setShowReview(true);
+          }, delay),
+        );
+      }
+    }, GAME_OVER_DELAY_MS);
+    return () => {
+      clearTimeout(t);
+      timers.forEach(clearTimeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOver]);
+  const reset = () => {
+    setShowGameOver(false);
+    setShowReview(false);
+    setRecordFireworks(null);
+  };
+  return { showGameOver, showReview, setShowReview, recordFireworks, reset };
+}
+
+export function GameOverOverlay({
+  score,
+  best,
+  result,
+  losses,
+  stats,
+  recordFireworks,
+  showReview,
+  onCloseReview,
+  onRestart,
+}: {
+  score: number;
+  best: number;
+  result: GameResult | null;
+  losses: number;
+  stats: { label: string; value: number | string }[];
+  recordFireworks: number | null;
+  showReview: boolean;
+  onCloseReview: () => void;
+  onRestart: () => void;
+}) {
+  const screen = useWindowDimensions();
+  const cardLook = result?.newBest ? CARD_LOOKS.newBest : result?.tiedBest ? CARD_LOOKS.tied : CARD_LOOKS.below;
+  const overLine = useMemo(
+    () => (result ? gameOverLine(score, best, result.newBest, losses) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [result, score, best],
+  );
+  return (
+    <>
+      <View style={styles.overlay}>
+        <View style={[styles.card, { backgroundColor: cardLook.bg }]}>
+          <Text style={styles.cardTitle}>Hết chiêuuuu</Text>
+          {result?.newBest && <NewBestBadge />}
+          <Text style={styles.cardScore} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {score.toLocaleString()}
+          </Text>
+          <Text style={styles.cardSub}>Kỷ lục: {best.toLocaleString()}</Text>
+          {overLine && (
+            <View style={styles.overLineBox}>
+              <SymbolView
+                name={LINE_ICONS[overLine.tone].name}
+                size={34}
+                tintColor={LINE_ICONS[overLine.tone].color}
+                style={styles.overLineIcon}
+              />
+              <Text style={styles.overLine}>{overLine.text}</Text>
+            </View>
+          )}
+          <View style={styles.statsRow}>
+            {stats.map((st) => (
+              <Stat key={st.label} label={st.label} value={st.value} />
+            ))}
+          </View>
+          <Pressable style={[styles.primaryButton, { backgroundColor: cardLook.button }]} onPress={onRestart}>
+            <Text style={[styles.primaryText, { color: cardLook.buttonText }]}>Chơi lại</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+            <Text style={styles.secondaryText}>Về menu</Text>
+          </Pressable>
+        </View>
+        {recordFireworks !== null && <Fireworks id={recordFireworks} width={screen.width} height={screen.height} />}
+      </View>
+      {showReview && (
+        <ReviewPrompt
+          onRate={() => {
+            hapticTap();
+            onCloseReview();
+            requestStoreReview();
+          }}
+          onLater={() => {
+            hapticTap();
+            onCloseReview();
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -536,8 +585,8 @@ function ReviewPrompt({ onRate, onLater }: { onRate: () => void; onLater: () => 
           ))}
         </View>
         <Text style={styles.reviewTitle}>Bạn thích trò chơi chứ?</Text>
-        <Pressable style={[styles.primaryButton, styles.reviewButton]} onPress={onRate}>
-          <Text style={[styles.primaryText, styles.reviewButtonText]}>Đánh giá</Text>
+        <Pressable style={styles.primaryButton} onPress={onRate}>
+          <Text style={styles.primaryText}>Đánh giá</Text>
         </Pressable>
         <Pressable style={styles.secondaryButton} onPress={onLater}>
           <Text style={styles.secondaryText}>Để sau</Text>
@@ -556,7 +605,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-function Toast({ text }: { text: string }) {
+export function Toast({ text }: { text: string }) {
   const progress = useSharedValue(0);
   useEffect(() => {
     progress.value = withTiming(1, { duration: TOAST_MS });
@@ -573,7 +622,7 @@ function Toast({ text }: { text: string }) {
   );
 }
 
-function RewardPopup({ kind, text, top, onShow }: { kind: RewardKind; text: string; top: number; onShow: () => void }) {
+export function RewardPopup({ kind, text, top, onShow }: { kind: RewardKind; text: string; top: number; onShow: () => void }) {
   const progress = useSharedValue(0);
   const scale = useSharedValue(0.4);
   useEffect(() => {
@@ -610,7 +659,7 @@ function RewardPopup({ kind, text, top, onShow }: { kind: RewardKind; text: stri
   );
 }
 
-function ScorePopup({ popup, top }: { popup: Popup; top: number }) {
+export function ScorePopup({ popup, top }: { popup: Popup; top: number }) {
   const progress = useSharedValue(0);
   useEffect(() => {
     progress.value = withTiming(1, { duration: 900 });
@@ -651,7 +700,7 @@ function NewBestBadge() {
   );
 }
 
-function PopBanner({ top, children }: { top: number; children: ReactNode }) {
+export function PopBanner({ top, children }: { top: number; children: ReactNode }) {
   const scale = useSharedValue(0.3);
   const tilt = useSharedValue(0);
   const progress = useSharedValue(0);
@@ -680,7 +729,7 @@ function PopBanner({ top, children }: { top: number; children: ReactNode }) {
   );
 }
 
-function ComboBanner({ combo, top }: { combo: number; top: number }) {
+export function ComboBanner({ combo, top }: { combo: number; top: number }) {
   const color = COMBO_COLORS[Math.min(combo, COMBO_COLORS.length + 1) - 2];
   return (
     <PopBanner top={top}>
@@ -718,7 +767,7 @@ function HeartPop({ x, y }: { x: number; y: number }) {
   );
 }
 
-function StageBackground({ color }: { color: string | null }) {
+export function StageBackground({ color }: { color: string | null }) {
   const [shown, setShown] = useState(color);
   const [from, setFrom] = useState(color);
   if (color !== shown) {
@@ -739,7 +788,7 @@ function StageBackground({ color }: { color: string | null }) {
   );
 }
 
-function RecordBanner({ top }: { top: number }) {
+export function RecordBanner({ top }: { top: number }) {
   return (
     <PopBanner top={top}>
       <View style={styles.recordRow}>
@@ -750,7 +799,7 @@ function RecordBanner({ top }: { top: number }) {
   );
 }
 
-function LinesBanner({ lines, top }: { lines: number; top: number }) {
+export function LinesBanner({ lines, top }: { lines: number; top: number }) {
   return (
     <PopBanner top={top}>
       <Text style={styles.bannerWord}>Nổ hũ </Text>
@@ -989,8 +1038,6 @@ const styles = StyleSheet.create({
   reviewStars: { flexDirection: 'row', gap: 6 },
   reviewStar: { width: 30, height: 30 },
   reviewTitle: { color: COLORS.text, fontSize: 22, fontWeight: '900', marginTop: 14 },
-  reviewButton: { backgroundColor: '#FFD84D' },
-  reviewButtonText: { color: '#1B1F3B' },
   primaryText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
   secondaryButton: {
     marginTop: 10,

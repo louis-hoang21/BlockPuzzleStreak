@@ -1,0 +1,13 @@
+{
+  "cols": 9,
+  "rows": 18,
+  "hiddenRows": 2,
+  "preview": 3,
+  "lockDelayMs": 500,
+  "maxLockResets": 15,
+  "linesPerLevel": 10,
+  "gravity": { "startMs": 800, "factor": 0.85, "minMs": 50 },
+  "softDropMs": 40,
+  "points": { "lines": [0, 100, 300, 500, 800], "combo": 50, "perfectClear": 1500, "softDrop": 1, "hardDrop": 2 },
+  "colorStageLevels": 3
+}

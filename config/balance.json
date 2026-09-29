@@ -9,17 +9,20 @@
   "pieceColors": 7,
   "difficulty": {
     "scale": 8000,
+    "grace": 2000,
     "easy": {
-      "small": 3.5,
-      "medium": 4,
+      "basic": 3,
+      "small": 0.6,
+      "medium": 3.5,
       "large": 1,
-      "bar": 2.5
+      "long": 0.45
     },
     "hard": {
+      "basic": 0.9,
       "small": 0,
       "medium": 1.5,
       "large": 8.5,
-      "bar": 0.8
+      "long": 0.33
     }
   },
   "startingRotations": 3,
@@ -27,16 +30,33 @@
     "minBest": 20000,
     "chance": 0.7,
     "fillEasy": 0.2,
-    "fillHard": 0.42,
+    "fillHard": 0.34,
     "nearLinesEasy": 3,
     "nearLinesHard": 1,
     "tiers": {
-      "easy": [0, 0.3],
-      "medium": [0.3, 0.6],
-      "hard": [0.6, 0.9]
+      "easy": [
+        0,
+        0.2
+      ],
+      "medium": [
+        0.2,
+        0.4
+      ],
+      "hard": [
+        0.4,
+        0.6
+      ]
     },
-    "tierWeightsAtMinBest": { "easy": 60, "medium": 30, "hard": 10 },
-    "tierWeightsAtTopBest": { "easy": 25, "medium": 45, "hard": 30 },
+    "tierWeightsAtMinBest": {
+      "easy": 70,
+      "medium": 25,
+      "hard": 5
+    },
+    "tierWeightsAtTopBest": {
+      "easy": 45,
+      "medium": 40,
+      "hard": 15
+    },
     "topBest": 40000
   },
   "solvableSearchBudget": 20000,

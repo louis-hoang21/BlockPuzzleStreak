@@ -13,7 +13,9 @@ import { ScreenHeader } from '../ui/ScreenHeader';
 export default function RecordsScreen() {
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<Mode>(MODES[0].id);
-  const { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest } = useRecordsStore((s) => s.byMode[mode]);
+  const { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest, bestLevel } = useRecordsStore(
+    (s) => s.byMode[mode],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -53,8 +55,14 @@ export default function RecordsScreen() {
           </View>
           <View style={styles.total}>
             <Text style={styles.totalValue}>{totalLinesCleared.toLocaleString()}</Text>
-            <Text style={styles.totalLabel}>Tổng nổ hũ</Text>
+            <Text style={styles.totalLabel}>{mode === 'classic' ? 'Tổng hàng' : 'Tổng nổ hũ'}</Text>
           </View>
+          {mode === 'classic' && (
+            <View style={styles.total}>
+              <Text style={styles.totalValue}>{bestLevel.toLocaleString()}</Text>
+              <Text style={styles.totalLabel}>Cấp cao nhất</Text>
+            </View>
+          )}
         </View>
         {mode === 'jackpot' && (
           <>

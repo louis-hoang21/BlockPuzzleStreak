@@ -10,7 +10,7 @@ export interface Piece {
 }
 
 export function difficultyAt(score: number): number {
-  return 1 - Math.exp(-Math.max(0, score) / balance.difficulty.scale);
+  return 1 - Math.exp(-Math.max(0, score - balance.difficulty.grace) / balance.difficulty.scale);
 }
 
 function tierWeight(tier: Tier, t: number): number {
@@ -20,9 +20,9 @@ function tierWeight(tier: Tier, t: number): number {
 
 export function randomPiece(rng: Rng, score: number): Piece {
   const t = difficultyAt(score);
-  const tierCounts: Record<Tier, number> = { small: 0, medium: 0, large: 0, bar: 0 };
-  for (const s of SHAPES) tierCounts[s.tier]++;
-  const weights = SHAPES.map((s) => tierWeight(s.tier, t) / tierCounts[s.tier]);
+  const tierTotals: Record<Tier, number> = { basic: 0, small: 0, medium: 0, large: 0, long: 0 };
+  for (const s of SHAPES) tierTotals[s.tier] += s.weight ?? 1;
+  const weights = SHAPES.map((s) => (tierWeight(s.tier, t) * (s.weight ?? 1)) / tierTotals[s.tier]);
   const total = weights.reduce((a, b) => a + b, 0);
 
   let roll = rng() * total;
