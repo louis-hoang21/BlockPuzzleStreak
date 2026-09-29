@@ -11,7 +11,7 @@
       "ios"
     ],
     "ios": {
-      "buildNumber": "1",
+      "buildNumber": "2",
       "supportsTablet": false,
       "infoPlist": {
         "CFBundleDisplayName": "Block Streak"
