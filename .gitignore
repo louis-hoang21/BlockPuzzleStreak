@@ -45,3 +45,6 @@ AGENTS.md
 
 # gift code hashes: generated locally with `npm run gift-codes`, never committed (see README)
 config/giftCodes.json
+
+# planning notes (kept locally, not committed)
+PLAN.md
