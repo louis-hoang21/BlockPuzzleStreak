@@ -10,6 +10,23 @@ npm run check   # typecheck + lint
 npm run ios     # build and run on the iOS Simulator
 ```
 
+## App identity (`.env`)
+
+Values tied to one Apple developer account are not committed. `app.config.ts` reads them from environment
+variables, and the Expo CLI loads a local `.env` file (gitignored) automatically:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Used for | When empty |
+|---|---|---|
+| `IOS_BUNDLE_ID` | iOS bundle identifier | `com.example.blockpuzzlestreak` |
+| `APPLE_TEAM_ID` | Signing team written into the Xcode project by `npx expo prebuild` | Pick the team in Xcode |
+| `APP_STORE_URL` | "Rate" button opens the App Store review page (`https://apps.apple.com/app/id<Apple ID>`) | Falls back to Apple's in-app rating sheet |
+
+Changing these values needs a new `npx expo prebuild --platform ios` and a rebuild.
+
 ## Gift codes (`BPS-XXXX-XXXX`)
 
 A gift code unlocks every theme and skin. The app checks codes offline against a list of SHA-256 hashes in

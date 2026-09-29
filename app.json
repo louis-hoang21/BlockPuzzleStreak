@@ -11,7 +11,6 @@
       "ios"
     ],
     "ios": {
-      "bundleIdentifier": "com.hunghd.blockpuzzlestreak",
       "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
@@ -44,8 +43,7 @@
             ]
           }
         ]
-      },
-      "appStoreUrl": "https://apps.apple.com/app/id6816928205"
+      }
     },
     "splash": {
       "image": "./assets/splash-icon.png",
