@@ -1,0 +1,6 @@
+{
+  "rotationMilestones": {
+    "scores": [5000, 25000, 30000, 40000, 50000],
+    "rotations": 1
+  }
+}

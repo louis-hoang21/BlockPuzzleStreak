@@ -1,0 +1,60 @@
+{
+  "gridSize": 8,
+  "traySize": 3,
+  "pointsPerCell": 5,
+  "lineClearBase": 150,
+  "perfectClearBonus": 1500,
+  "maxRotations": 10,
+  "fairnessRetries": 20,
+  "pieceColors": 7,
+  "difficulty": {
+    "scale": 8000,
+    "easy": {
+      "small": 3.5,
+      "medium": 4,
+      "large": 1,
+      "bar": 2.5
+    },
+    "hard": {
+      "small": 0,
+      "medium": 1.5,
+      "large": 8.5,
+      "bar": 0.8
+    }
+  },
+  "startingRotations": 3,
+  "prefill": {
+    "minBest": 20000,
+    "chance": 0.7,
+    "fillEasy": 0.2,
+    "fillHard": 0.42,
+    "nearLinesEasy": 3,
+    "nearLinesHard": 1,
+    "tiers": {
+      "easy": [0, 0.3],
+      "medium": [0.3, 0.6],
+      "hard": [0.6, 0.9]
+    },
+    "tierWeightsAtMinBest": { "easy": 60, "medium": 30, "hard": 10 },
+    "tierWeightsAtTopBest": { "easy": 25, "medium": 45, "hard": 30 },
+    "topBest": 40000
+  },
+  "solvableSearchBudget": 20000,
+  "colorStageEvery": 5000,
+  "reviewPrompt": {
+    "chance": 0.25,
+    "maxPerDevice": 2,
+    "minDelayMs": 1500,
+    "maxDelayMs": 5000
+  },
+  "toughSet": {
+    "minScore": 8000,
+    "chance": 0.02,
+    "rampFrom": 10000,
+    "rampChance": 0.03,
+    "rampEvery": 5000,
+    "rampAdd": 0.005,
+    "maxChance": 0.1,
+    "candidates": 24
+  }
+}
