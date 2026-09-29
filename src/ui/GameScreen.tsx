@@ -61,6 +61,7 @@ const LINE_ICONS = {
   tease: { name: 'face.smiling.inverse', color: '#FFD84D' },
 } as const satisfies Record<LineTone, { name: SFSymbol; color: string }>;
 const TOAST_MS = 1400;
+const SCORE_POPUP_MS = 1600;
 const BADGE_PULSE_MS = 3000;
 const BADGE_PULSES = 6;
 const STAGE_SFX_DELAY_MS = 350;
@@ -622,7 +623,17 @@ export function Toast({ text }: { text: string }) {
   );
 }
 
-export function RewardPopup({ kind, text, top, onShow }: { kind: RewardKind; text: string; top: number; onShow: () => void }) {
+export function RewardPopup({
+  kind,
+  text,
+  top,
+  onShow,
+}: {
+  kind: RewardKind;
+  text: string;
+  top: number;
+  onShow: () => void;
+}) {
   const progress = useSharedValue(0);
   const scale = useSharedValue(0.4);
   useEffect(() => {
@@ -662,11 +673,11 @@ export function RewardPopup({ kind, text, top, onShow }: { kind: RewardKind; tex
 export function ScorePopup({ popup, top }: { popup: Popup; top: number }) {
   const progress = useSharedValue(0);
   useEffect(() => {
-    progress.value = withTiming(1, { duration: 900 });
+    progress.value = withTiming(1, { duration: SCORE_POPUP_MS });
   }, [progress]);
   const style = useAnimatedStyle(() => ({
-    opacity: progress.value < 0.7 ? 1 : 1 - (progress.value - 0.7) / 0.3,
-    transform: [{ translateY: -60 * progress.value }, { scale: 0.8 + Math.min(progress.value * 4, 1) * 0.2 }],
+    opacity: progress.value < 0.8 ? 1 : 1 - (progress.value - 0.8) / 0.2,
+    transform: [{ translateY: -50 * progress.value }, { scale: 0.8 + Math.min(progress.value * 8, 1) * 0.2 }],
   }));
   return (
     <Animated.View pointerEvents="none" style={[styles.popup, { top }, style]}>
