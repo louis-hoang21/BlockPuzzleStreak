@@ -52,3 +52,6 @@ PLAN.md
 
 # App Store screenshots (large PNGs, uploaded to App Store Connect, not committed)
 store/
+
+# App Store submission notes (kept locally, not committed)
+APP_STORE.md

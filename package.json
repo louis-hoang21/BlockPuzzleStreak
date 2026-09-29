@@ -1,6 +1,6 @@
 {
   "name": "blockpuzzlestreak",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "expo-router/entry",
   "dependencies": {
     "@shopify/react-native-skia": "2.6.2",
