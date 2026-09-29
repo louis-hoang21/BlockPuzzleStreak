@@ -55,6 +55,7 @@ export type ClassicEvent =
       type: 'clear';
       rows: number[];
       cells: ClearedCell[];
+      before: number[];
       lines: number;
       combo: number;
       points: number;
@@ -239,7 +240,16 @@ function lock(state: ClassicState): Step {
         perfectClears: next.stats.perfectClears + (perfect ? 1 : 0),
       },
     };
-    events.push({ type: 'clear', rows: full, cells: cleared, lines: full.length, combo, points, perfect });
+    events.push({
+      type: 'clear',
+      rows: full,
+      cells: cleared,
+      before: cells,
+      lines: full.length,
+      combo,
+      points,
+      perfect,
+    });
     if (level > state.level) events.push({ type: 'levelUp', level });
   } else {
     next = { ...next, combo: 0 };

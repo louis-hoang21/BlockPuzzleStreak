@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { SymbolView } from 'expo-symbols';
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -33,6 +34,7 @@ function Row({ label, value, onChange }: { label: string; value: boolean; onChan
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const giftPass = useProgressStore((s) => s.giftRedeemed);
   const { sound, haptics, classicButtons, reminder, reminderHour, reminderMinute, update } = useSettingsStore();
   const [blocked, setBlocked] = useState(false);
 
@@ -61,7 +63,20 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Cài đặt" />
+      <ScreenHeader
+        title="Cài đặt"
+        right={
+          giftPass ? (
+            <SymbolView
+              name="crown.fill"
+              size={24}
+              tintColor="#FFD84D"
+              style={styles.crown}
+              accessibilityLabel="Đã kích hoạt mã quà tặng"
+            />
+          ) : null
+        }
+      />
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
         <View style={styles.card}>
           <Row label="Âm thanh" value={sound} onChange={(v) => update({ sound: v })} />
@@ -154,7 +169,10 @@ function GiftCodeCard() {
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.label}>Mã quà tặng</Text>
-          <Text style={styles.redeemedBadge}>Đã dùng</Text>
+          <View style={styles.redeemedRow}>
+            <SymbolView name="crown.fill" size={16} tintColor="#FFD84D" style={styles.redeemedCrown} />
+            <Text style={styles.redeemedBadge}>Đã dùng</Text>
+          </View>
         </View>
         <Text style={styles.redeemedText}>Kho báu đã mở: toàn bộ theme và skin. Vào Bộ sưu tập để chọn nhé!</Text>
         {message?.ok && <Text style={[styles.codeMessage, { color: '#3DCB4A' }]}>{message.text}</Text>}
@@ -237,6 +255,9 @@ const styles = StyleSheet.create({
   },
   codeButtonDisabled: { opacity: 0.4 },
   codeButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  crown: { width: 24, height: 24 },
+  redeemedRow: { flexDirection: 'row', alignItems: 'center' },
+  redeemedCrown: { width: 16, height: 16, marginRight: 4 },
   redeemedBadge: {
     color: '#3DCB4A',
     fontSize: 13,

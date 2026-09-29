@@ -1,16 +1,4 @@
-import {
-  BlurMask,
-  BlurStyle,
-  Canvas,
-  createPicture,
-  Group,
-  PaintStyle,
-  Picture,
-  RoundedRect,
-  Skia,
-  TileMode,
-  vec,
-} from '@shopify/react-native-skia';
+import { BlurMask, Canvas, createPicture, Group, Picture, RoundedRect } from '@shopify/react-native-skia';
 import { useEffect, useMemo, useState } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
@@ -29,6 +17,7 @@ import type { Piece } from '../core/pieceGenerator';
 import { shapeSize, type Shape } from '../core/pieces';
 import { Block, PieceBlocks } from './Block';
 import { EmptyCell } from './EmptyCell';
+import { drawRainbowBoxes, RAINBOW_MS, type Box } from './rainbow';
 import { slotCenter, type BoardLayout } from './layout';
 import type { BoardTheme, Skin } from './theme';
 
@@ -60,10 +49,14 @@ type Size = { rows: number; cols: number } | null;
 type Preview = { valid: boolean; rows: number[]; cols: number[] };
 
 const NO_PREVIEW: Preview = { valid: false, rows: [], cols: [] };
-const RAINBOW = ['#FF4D4D', '#FF9F1C', '#FFE14D', '#4DDB6B', '#3DB8FF', '#8F6BFF', '#FF5FD2', '#FF4D4D'];
-const RAINBOW_MS = 1400;
 
-function previewAt(cells: readonly number[], n: number, shape: readonly (readonly number[])[], row: number, col: number): Preview {
+function previewAt(
+  cells: readonly number[],
+  n: number,
+  shape: readonly (readonly number[])[],
+  row: number,
+  col: number,
+): Preview {
   'worklet';
   const filled = cells.slice();
   for (const [r, c] of shape) {
@@ -92,7 +85,8 @@ const SPIN_MS = 180;
 const FLASH_COLOR = '#FFE680';
 
 export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onRotate, theme, skin }: Props) {
-  const { cell, boardX, boardY, boardSize, framePad, trayX, trayY, trayWidth, trayHeight, trayCell, slotWidth, lift } = layout;
+  const { cell, boardX, boardY, boardSize, framePad, trayX, trayY, trayWidth, trayHeight, trayCell, slotWidth, lift } =
+    layout;
   const n = board.size;
 
   const [dragSlot, setDragSlot] = useState<number | null>(null);
@@ -242,40 +236,11 @@ export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onR
     const { rows, cols } = preview.value;
     const phase = rainbow.value;
     return createPicture((canvas) => {
-      if (rows.length === 0 && cols.length === 0) return;
-      const shift = phase * boardSize * 2;
-      const shader = Skia.Shader.MakeLinearGradient(
-        vec(boardX + shift, boardY + shift),
-        vec(boardX + shift + boardSize, boardY + shift + boardSize),
-        RAINBOW.map((c) => Skia.Color(c)),
-        null,
-        TileMode.Mirror,
-      );
-      const fill = Skia.Paint();
-      fill.setColor(Skia.Color('#FFFFFF'));
-      fill.setAlphaf(0.2);
-      const tint = Skia.Paint();
-      tint.setShader(shader);
-      tint.setAlphaf(0.28);
-      const glow = Skia.Paint();
-      glow.setShader(shader);
-      glow.setStyle(PaintStyle.Stroke);
-      glow.setStrokeWidth(5);
-      glow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Solid, 4, true));
-      const border = Skia.Paint();
-      border.setShader(shader);
-      border.setStyle(PaintStyle.Stroke);
-      border.setStrokeWidth(3);
-      const draw = (x: number, y: number, w: number, h: number) => {
-        const box = Skia.RRectXY(Skia.XYWHRect(x, y, w, h), cell * 0.18, cell * 0.18);
-        const edge = Skia.RRectXY(Skia.XYWHRect(x + 1.5, y + 1.5, w - 3, h - 3), cell * 0.16, cell * 0.16);
-        canvas.drawRRect(box, fill);
-        canvas.drawRRect(box, tint);
-        canvas.drawRRect(edge, glow);
-        canvas.drawRRect(edge, border);
-      };
-      for (const r of rows) draw(boardX, boardY + r * cell, boardSize, cell);
-      for (const c of cols) draw(boardX + c * cell, boardY, cell, boardSize);
+      const boxes: Box[] = [
+        ...rows.map((r): Box => [boardX, boardY + r * cell, boardSize, cell]),
+        ...cols.map((c): Box => [boardX + c * cell, boardY, cell, boardSize]),
+      ];
+      drawRainbowBoxes(canvas, boxes, phase, [boardX, boardY, boardSize, boardSize], cell);
     });
   });
 
@@ -354,9 +319,21 @@ export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onR
               const x = boardX + col * cell;
               const y = boardY + row * cell;
               return (
-                <Group key={`${clearing.id}-${row}-${col}`} origin={{ x: x + cell / 2, y: y + cell / 2 }} transform={clearScale}>
+                <Group
+                  key={`${clearing.id}-${row}-${col}`}
+                  origin={{ x: x + cell / 2, y: y + cell / 2 }}
+                  transform={clearScale}
+                >
                   <Block x={x} y={y} size={cell} color={color} skin={skin} />
-                  <RoundedRect x={x + 2} y={y + 2} width={cell - 4} height={cell - 4} r={cell * 0.16} color="white" opacity={flashOpacity} />
+                  <RoundedRect
+                    x={x + 2}
+                    y={y + 2}
+                    width={cell - 4}
+                    height={cell - 4}
+                    r={cell * 0.16}
+                    color="white"
+                    opacity={flashOpacity}
+                  />
                 </Group>
               );
             })}
@@ -372,7 +349,8 @@ export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onR
             r={framePad * 1.5}
             color={FLASH_COLOR}
             style="stroke"
-            strokeWidth={framePad}>
+            strokeWidth={framePad}
+          >
             <BlurMask blur={framePad} style="solid" />
           </RoundedRect>
         </Group>
@@ -402,7 +380,12 @@ export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onR
           const { rows, cols } = shapeSize(piece.cells);
           const center = slotCenter(layout, slot);
           const blocks = (
-            <Group transform={[{ translateX: center.x - (cols * trayCell) / 2 }, { translateY: center.y - (rows * trayCell) / 2 }]}>
+            <Group
+              transform={[
+                { translateX: center.x - (cols * trayCell) / 2 },
+                { translateY: center.y - (rows * trayCell) / 2 },
+              ]}
+            >
               <PieceBlocks cells={piece.cells} color={piece.color} size={trayCell} skin={skin} />
             </Group>
           );

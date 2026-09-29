@@ -12,7 +12,7 @@ import { useSettingsStore } from './settingsStore';
 interface ProgressStore extends DeviceProgress {
   setRotations: (rotations: number) => void;
   grantRotations: (amount: number) => number;
-  onScore: (prev: number, next: number) => void;
+  onScore: (prev: number, next: number, withRotations?: boolean) => void;
   onPerfectClear: () => void;
   onCombo: (combo: number) => void;
   unlockAll: () => number;
@@ -39,8 +39,8 @@ export const useProgressStore = create<ProgressStore>()((set, get) => {
       if (added > 0) save({ rotations });
       return added;
     },
-    onScore: (prev, next) => {
-      for (const score of rotationMilestonesCrossed(prev, next)) {
+    onScore: (prev, next, withRotations = true) => {
+      for (const score of withRotations ? rotationMilestonesCrossed(prev, next) : []) {
         const added = get().grantRotations(milestones.rotationMilestones.rotations);
         if (added > 0) notify(`Mốc ${fmt(score)} điểm! +${added} lượt xoay`, 'rotation');
         else notify(`Mốc ${fmt(score)} điểm! Kho xoay đã đầy`);
@@ -82,3 +82,5 @@ export const useProgressStore = create<ProgressStore>()((set, get) => {
     },
   };
 });
+
+export const hasGiftPass = () => useProgressStore.getState().giftRedeemed;

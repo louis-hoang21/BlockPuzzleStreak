@@ -6,8 +6,41 @@
   "lockDelayMs": 500,
   "maxLockResets": 15,
   "linesPerLevel": 10,
-  "gravity": { "startMs": 800, "factor": 0.85, "minMs": 50 },
+  "gravity": {
+    "startMs": 800,
+    "factor": 0.85,
+    "minMs": 50,
+    "steps": [
+      {
+        "fromLevel": 7,
+        "toLevel": 10,
+        "stepMs": 50
+      },
+      {
+        "fromLevel": 11,
+        "toLevel": 15,
+        "stepMs": 10
+      },
+      {
+        "fromLevel": 16,
+        "toLevel": 18,
+        "stepMs": 5
+      }
+    ]
+  },
   "softDropMs": 40,
-  "points": { "lines": [0, 100, 300, 500, 800], "combo": 50, "perfectClear": 1500, "softDrop": 1, "hardDrop": 2 },
+  "points": {
+    "lines": [
+      0,
+      100,
+      300,
+      500,
+      800
+    ],
+    "combo": 50,
+    "perfectClear": 1500,
+    "softDrop": 1,
+    "hardDrop": 2
+  },
   "colorStageLevels": 3
 }

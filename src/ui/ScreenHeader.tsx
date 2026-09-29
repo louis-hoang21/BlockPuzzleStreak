@@ -1,17 +1,18 @@
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '../render/theme';
 
-export function ScreenHeader({ title }: { title: string }) {
+export function ScreenHeader({ title, right }: { title: string; right?: ReactNode }) {
   return (
     <View style={styles.header}>
       <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back" style={styles.side}>
         <SymbolView name="chevron.left" size={22} tintColor={COLORS.text} style={styles.icon} />
       </Pressable>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.side} />
+      <View style={styles.side}>{right}</View>
     </View>
   );
 }

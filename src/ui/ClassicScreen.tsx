@@ -24,11 +24,13 @@ import { stageColor } from '../core/stages';
 import { hapticCelebrate, hapticClear, hapticCombo, hapticPlace, hapticTap } from '../haptics';
 import { Fireworks } from '../render/Fireworks';
 import { ThemeBackdrop } from '../render/Backdrops';
-import { ClassicBoard, type ClassicClear } from '../render/ClassicBoard';
+import { ClassicBoard, CLEAR_MS, type ClassicClear } from '../render/ClassicBoard';
 import { computeClassicLayout, type ClassicLayout } from '../render/classicLayout';
 import { COLORS, hudColors, rotationBadgeColor, skinById, STAGE_LOOKS, themeById } from '../render/theme';
 import { useClassicStore } from '../store/classicStore';
 import { useRecordsStore } from '../store/recordsStore';
+import { useNoticeStore } from '../store/noticeStore';
+import { useProgressStore } from '../store/progressStore';
 import { useSettingsStore } from '../store/settingsStore';
 import {
   COMBO_SFX_DELAY_MS,
@@ -37,8 +39,10 @@ import {
   LinesBanner,
   PopBanner,
   RecordBanner,
+  RewardPopup,
   ScorePopup,
   StageBackground,
+  Toast,
   useGameOverFlow,
   type Popup,
 } from './GameScreen';
@@ -48,6 +52,9 @@ type Phase = 'ready' | 'countdown' | 'running' | 'paused';
 const RECORD_SFX_DELAY_MS = 500;
 const LEVEL_SFX_DELAY_MS = 350;
 const MAX_FRAME_MS = 100;
+const SOFT_DROP_CELLS = 0.6;
+const HARD_DROP_VELOCITY = 700;
+const HARD_DROP_CELLS = 0.8;
 const CONTROL_REPEAT_DELAY_MS = 220;
 const CONTROL_REPEAT_MS = 70;
 
@@ -77,6 +84,7 @@ export function ClassicScreen() {
   const theme = themeById(useSettingsStore((s) => s.theme));
   const skin = skinById(useSettingsStore((s) => s.skin));
   const showButtons = useSettingsStore((s) => s.classicButtons);
+  const notice = useNoticeStore((s) => s.queue[0]);
 
   const engine = useRef<ClassicState>(stored);
   const [view, setView] = useState<ClassicState>(stored);
@@ -92,6 +100,7 @@ export function ClassicScreen() {
   const [fireworks, setFireworks] = useState<number | null>(null);
   const eventId = useRef(0);
   const soft = useRef(false);
+  const holdUntil = useRef(0);
   const over = useGameOverFlow(view.over, result);
 
   const shakeX = useSharedValue(0);
@@ -143,7 +152,12 @@ export function ClassicScreen() {
           lines = e.lines;
           combo = e.combo;
           perfect = e.perfect;
-          setClearing({ id, cells: e.cells });
+          setClearing({ id, cells: e.cells, rows: e.rows, lines: e.lines });
+          const shown = e.before.slice();
+          for (const r of e.rows) shown.fill(0, r * next.cols, (r + 1) * next.cols);
+          setView({ ...next, cells: shown, active: null });
+          holdUntil.current = performance.now() + CLEAR_MS;
+          setTimeout(() => setView(engine.current), CLEAR_MS);
           setPopup({ id, points: e.points, label: e.perfect ? 'Amazing!' : null });
           if (e.combo >= 2) setComboEvent({ id, combo: e.combo });
           if (e.lines >= 2) setMultiLines({ id, lines: e.lines });
@@ -197,6 +211,16 @@ export function ClassicScreen() {
     [shakeX, dropY],
   );
 
+  const rewardProgress = useCallback((prev: ClassicState, next: ClassicState, events: ClassicEvent[]) => {
+    const progress = useProgressStore.getState();
+    if (next.score > prev.score) progress.onScore(prev.score, next.score, false);
+    for (const e of events) {
+      if (e.type !== 'clear') continue;
+      if (e.perfect) progress.onPerfectClear();
+      if (e.combo > prev.combo) progress.onCombo(e.combo);
+    }
+  }, []);
+
   const apply = useCallback(
     (fn: (s: ClassicState) => ClassicState | Step) => {
       const prev = engine.current;
@@ -213,8 +237,9 @@ export function ClassicScreen() {
         setView(next);
       }
       handleEvents(prev, next, events);
+      rewardProgress(prev, next, events);
     },
-    [handleEvents],
+    [handleEvents, rewardProgress],
   );
 
   const running = phase === 'running' && !view.over;
@@ -226,7 +251,7 @@ export function ClassicScreen() {
     const frame = (now: number) => {
       const dt = Math.min(MAX_FRAME_MS, now - last);
       last = now;
-      apply((s) => tick(s, dt, soft.current));
+      if (now >= holdUntil.current) apply((s) => tick(s, dt, soft.current));
       if (!engine.current.over) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -250,18 +275,24 @@ export function ClassicScreen() {
 
   const onMove = useCallback(
     (steps: number) => {
+      if (performance.now() < holdUntil.current) return;
       const dir = Math.sign(steps);
       for (let i = 0; i < Math.abs(steps); i++) apply((s) => move(s, dir));
     },
     [apply],
   );
   const onRotate = useCallback(() => {
+    if (performance.now() < holdUntil.current) return;
     const before = engine.current.active;
     apply((s) => rotate(s));
     if (engine.current.active !== before) playSfx('rotate');
   }, [apply]);
-  const onHardDrop = useCallback(() => apply((s) => hardDrop(s)), [apply]);
+  const onHardDrop = useCallback(() => {
+    if (performance.now() < holdUntil.current) return;
+    apply((s) => hardDrop(s));
+  }, [apply]);
   const onHold = useCallback(() => {
+    if (performance.now() < holdUntil.current) return;
     const before = engine.current.hold;
     apply((s) => hold(s));
     if (engine.current.hold !== before) {
@@ -291,14 +322,16 @@ export function ClassicScreen() {
           movedX.value += steps * cell;
           scheduleOnRN(onMove, steps);
         }
-        const wantSoft = e.translationY > cell * 1.2 && e.translationY > Math.abs(e.translationX);
+        const wantSoft = e.translationY > cell * SOFT_DROP_CELLS && e.translationY > Math.abs(e.translationX);
         if (wantSoft !== softOn.value) {
           softOn.value = wantSoft;
           scheduleOnRN(setSoft, wantSoft);
         }
       })
       .onEnd((e) => {
-        if (e.velocityY > 1400 && e.translationY > cell) scheduleOnRN(onHardDrop);
+        const downward = e.translationY > Math.abs(e.translationX);
+        if (downward && e.velocityY > HARD_DROP_VELOCITY && e.translationY > cell * HARD_DROP_CELLS)
+          scheduleOnRN(onHardDrop);
         else if (e.velocityY < -900 && e.translationY < -cell * 1.5) scheduleOnRN(onHold);
       })
       .onFinalize(() => {
@@ -419,6 +452,16 @@ export function ClassicScreen() {
         )}
         {layout && fireworks !== null && <Fireworks id={fireworks} width={layout.width} height={layout.height} />}
         {layout && popup && <ScorePopup key={popup.id} popup={popup} top={centerY - 40} />}
+        {notice && !notice.reward && <Toast key={notice.id} text={notice.text} />}
+        {layout && notice?.reward && (
+          <RewardPopup
+            key={notice.id}
+            kind={notice.reward}
+            text={notice.text}
+            top={layout.boardY + layout.boardH * 0.12}
+            onShow={() => setFireworks(++eventId.current)}
+          />
+        )}
         {layout && recordEvent !== null && <RecordBanner key={recordEvent} top={Math.max(0, centerY - 200)} />}
         {layout && levelEvent && (
           <PopBanner key={levelEvent.id} top={Math.max(0, centerY - 260)}>

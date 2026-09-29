@@ -5,8 +5,14 @@ export function levelFor(lines: number): number {
 }
 
 export function gravityMs(level: number): number {
-  const { startMs, factor, minMs } = cfg.gravity;
-  return Math.max(minMs, startMs * Math.pow(factor, level - 1));
+  const { startMs, factor, minMs, steps } = cfg.gravity;
+  const curveEnd = steps.length > 0 ? steps[0].fromLevel - 1 : Infinity;
+  let ms = startMs * Math.pow(factor, Math.min(level, curveEnd) - 1);
+  for (const { fromLevel, toLevel, stepMs } of steps) {
+    const levels = Math.min(level, toLevel) - fromLevel + 1;
+    if (levels > 0) ms -= levels * stepMs;
+  }
+  return Math.max(minMs, Math.round(ms));
 }
 
 export function clearPoints(lines: number, combo: number, level: number, perfect: boolean): number {

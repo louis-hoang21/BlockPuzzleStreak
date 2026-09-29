@@ -1,6 +1,14 @@
-import { Canvas, Group, rect, RoundedRect } from '@shopify/react-native-skia';
+import { BlurMask, Canvas, createPicture, Group, Picture, rect, RoundedRect } from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
-import { useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+import {
+  cancelAnimation,
+  Easing,
+  useDerivedValue,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import cfg from '../../config/classic.json';
 import { ghostRow, pieceCells, type ClassicState, type ClearedCell } from '../core/classic/engine';
@@ -9,11 +17,14 @@ import { normalize, shapeSize } from '../core/pieces';
 import { Block, PieceBlocks } from './Block';
 import type { ClassicLayout } from './classicLayout';
 import { EmptyCell } from './EmptyCell';
+import { drawRainbowBoxes, RAINBOW_MS, type Box } from './rainbow';
 import type { BoardTheme, Skin } from './theme';
 
 export interface ClassicClear {
   id: number;
   cells: ClearedCell[];
+  rows: number[];
+  lines: number;
 }
 
 interface Props {
@@ -24,7 +35,13 @@ interface Props {
   skin: Skin;
 }
 
-const CLEAR_MS = 320;
+export const CLEAR_MS = 350;
+
+function clearOpacityValue(p: number): number {
+  'worklet';
+  return p < 0.35 ? 1 : 1 - (p - 0.35) / 0.65;
+}
+const FLASH_COLOR = '#FFE680';
 
 function MiniPiece({
   shape,
@@ -82,14 +99,74 @@ export function ClassicBoard({ layout, state, clearing, theme, skin }: Props) {
   const color = active ? shapeColor(active.shape) : 0;
 
   const clearProgress = useSharedValue(1);
+  const frameFlash = useSharedValue(0);
   useEffect(() => {
     if (!clearing) return;
     clearProgress.value = 0;
     clearProgress.value = withTiming(1, { duration: CLEAR_MS });
-  }, [clearing, clearProgress]);
-  const clearScale = useDerivedValue(() => [{ scale: 1 - clearProgress.value }]);
-  const clearOpacity = useDerivedValue(() => 1 - clearProgress.value);
-  const flashOpacity = useDerivedValue(() => Math.max(0, 0.7 - clearProgress.value * 1.6));
+    if (clearing.lines >= 2) {
+      frameFlash.value = withSequence(
+        withTiming(1, { duration: 70 }),
+        withTiming(0.25, { duration: 140 }),
+        withTiming(1, { duration: 70 }),
+        withTiming(0, { duration: 380 }),
+      );
+    }
+  }, [clearing, clearProgress, frameFlash]);
+  const clearScale = useDerivedValue(() => [
+    { scale: clearProgress.value < 0.35 ? 1 : 1 - (clearProgress.value - 0.35) / 0.65 },
+  ]);
+  const clearOpacity = useDerivedValue(() => clearOpacityValue(clearProgress.value));
+  const flashOpacity = useDerivedValue(() => {
+    const p = clearProgress.value;
+    return p < 0.35 ? 0.85 * (0.5 + 0.5 * Math.sin(p * 40)) : Math.max(0, 0.85 - (p - 0.35) * 2);
+  });
+
+  const previewRows = useMemo(() => {
+    if (!active) return [];
+    const filled = state.cells.slice();
+    for (const [r, c] of ghostCells) if (r >= 0) filled[r * cols + c] = 1;
+    const rows: number[] = [];
+    for (let r = hidden; r < state.rows; r++) {
+      let full = true;
+      for (let c = 0; c < cols; c++) if (filled[r * cols + c] === 0) full = false;
+      if (full) rows.push(r);
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.cells, active?.shape, active?.rot, active?.col, ghost, cols, hidden, state.rows]);
+
+  const previewBoxes = useSharedValue<Box[]>([]);
+  const clearBoxes = useSharedValue<Box[]>([]);
+  const rainbow = useSharedValue(0);
+  const glowing = previewRows.length > 0 || clearing !== null;
+  useEffect(() => {
+    previewBoxes.value = previewRows.map((r): Box => [boardX, boardY + (r - hidden) * cell, boardW, cell]);
+  }, [previewRows, previewBoxes, boardX, boardY, boardW, cell, hidden]);
+  useEffect(() => {
+    clearBoxes.value = clearing
+      ? clearing.rows.map((r): Box => [boardX, boardY + (r - hidden) * cell, boardW, cell])
+      : [];
+  }, [clearing, clearBoxes, boardX, boardY, boardW, cell, hidden]);
+  useEffect(() => {
+    if (!glowing) {
+      cancelAnimation(rainbow);
+      return;
+    }
+    rainbow.value = 0;
+    rainbow.value = withRepeat(withTiming(1, { duration: RAINBOW_MS, easing: Easing.linear }), -1, false);
+  }, [glowing, rainbow]);
+  const glow = useDerivedValue(() => {
+    const phase = rainbow.value;
+    const strength = clearProgress.value < 1 ? clearOpacityValue(clearProgress.value) : 0;
+    const area: Box = [boardX, boardY, boardW, boardH];
+    const pending = previewBoxes.value;
+    const bursting = clearBoxes.value;
+    return createPicture((canvas) => {
+      drawRainbowBoxes(canvas, pending, phase, area, cell);
+      if (strength > 0) drawRainbowBoxes(canvas, bursting, phase, area, cell, strength);
+    });
+  });
 
   const nextBoxH = sideCell * 2.6;
 
@@ -112,6 +189,20 @@ export function ClassicBoard({ layout, state, clearing, theme, skin }: Props) {
         color={theme.boardBg}
       />
       {grid}
+      <Group opacity={frameFlash}>
+        <RoundedRect
+          x={boardX - framePad / 2}
+          y={boardY - framePad / 2}
+          width={boardW + framePad}
+          height={boardH + framePad}
+          r={framePad * 1.5}
+          color={FLASH_COLOR}
+          style="stroke"
+          strokeWidth={framePad}
+        >
+          <BlurMask blur={framePad} style="solid" />
+        </RoundedRect>
+      </Group>
 
       <Group clip={rect(boardX, boardY, boardW, boardH)}>
         {ghostCells.map(([r, c]) => (
@@ -154,6 +245,7 @@ export function ClassicBoard({ layout, state, clearing, theme, skin }: Props) {
             })}
           </Group>
         )}
+        <Picture picture={glow} />
       </Group>
 
       <RoundedRect
