@@ -10,7 +10,7 @@ import {
   vec,
   type SkPath,
 } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 
 import { mulberry32 } from '../core/rng';
@@ -20,7 +20,7 @@ export type BackdropKind = 'night' | 'forest' | 'ocean' | 'space';
 
 const FAINT = 0.55;
 
-export function ThemeBackdrop({ kind }: { kind: BackdropKind }) {
+function ThemeBackdropView({ kind }: { kind: BackdropKind }) {
   switch (kind) {
     case 'night':
       return <NightBackdrop />;
@@ -33,7 +33,7 @@ export function ThemeBackdrop({ kind }: { kind: BackdropKind }) {
   }
 }
 
-export function sparklePath(cx: number, cy: number, r: number): SkPath {
+function sparklePath(cx: number, cy: number, r: number): SkPath {
   const k = r * 0.22;
   return Skia.PathBuilder.Make()
     .moveTo(cx, cy - r)
@@ -369,3 +369,5 @@ function OceanBackdrop() {
     </Canvas>
   );
 }
+
+export const ThemeBackdrop = memo(ThemeBackdropView);

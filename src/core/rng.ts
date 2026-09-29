@@ -18,6 +18,3 @@ export function createRng(state: number): { next: Rng; state: () => number } {
   };
 }
 
-export function randInt(rng: Rng, min: number, max: number): number {
-  return min + Math.floor(rng() * (max - min + 1));
-}

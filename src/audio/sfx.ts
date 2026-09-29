@@ -19,7 +19,8 @@ const SOURCES = {
 
 export type Sfx = keyof typeof SOURCES;
 
-const VOICES = 2;
+const REPEATED: readonly Sfx[] = ['place', 'drop', 'clear', 'rotate', 'combo2', 'combo3', 'combo4'];
+const voicesFor = (name: Sfx) => (REPEATED.includes(name) ? 2 : 1);
 
 let players: Record<Sfx, AudioPlayer[]> | null = null;
 const nextVoice: Partial<Record<Sfx, number>> = {};
@@ -31,7 +32,7 @@ export function initSfx() {
   players = Object.fromEntries(
     Object.entries(SOURCES).map(([name, source]) => [
       name,
-      Array.from({ length: VOICES }, () => createAudioPlayer(source, { keepAudioSessionActive: true })),
+      Array.from({ length: voicesFor(name as Sfx) }, () => createAudioPlayer(source, { keepAudioSessionActive: true })),
     ]),
   ) as Record<Sfx, AudioPlayer[]>;
 }

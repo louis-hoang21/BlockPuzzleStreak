@@ -1,5 +1,5 @@
 import { BlurMask, Canvas, createPicture, Group, Picture, RoundedRect } from '@shopify/react-native-skia';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -84,7 +84,7 @@ const CLEAR_MS = 320;
 const SPIN_MS = 180;
 const FLASH_COLOR = '#FFE680';
 
-export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onRotate, theme, skin }: Props) {
+function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRotate, theme, skin }: Props) {
   const { cell, boardX, boardY, boardSize, framePad, trayX, trayY, trayWidth, trayHeight, trayCell, slotWidth, lift } =
     layout;
   const n = board.size;
@@ -407,3 +407,5 @@ export function GameBoard({ layout, board, tray, clearing, disabled, onDrop, onR
     </GestureDetector>
   );
 }
+
+export const GameBoard = memo(GameBoardView);

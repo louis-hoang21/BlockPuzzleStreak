@@ -1,5 +1,6 @@
 import balance from '../../config/balance.json';
-import { canPlace, clearLines, findFullLines, lineCount, place, type Board } from './board';
+import { boardBits, placeAndClear, placements as spotsFor } from './bitboard';
+import { canPlace, type Board } from './board';
 import { rotateTimes, shapeById, SHAPES, type Shape, type Tier } from './pieces';
 import type { Rng } from './rng';
 
@@ -9,7 +10,7 @@ export interface Piece {
   cells: Shape;
 }
 
-export function difficultyAt(score: number): number {
+function difficultyAt(score: number): number {
   return 1 - Math.exp(-Math.max(0, score - balance.difficulty.grace) / balance.difficulty.scale);
 }
 
@@ -38,28 +39,32 @@ export function randomPiece(rng: Rng, score: number): Piece {
   return { shapeId: def.id, color: def.color, cells: rotateTimes(def.cells, turns) };
 }
 
-export function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
+function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
+  const n = board.size;
   let budget = balance.solvableSearchBudget;
-  const search = (b: Board, left: readonly Piece[]): boolean => {
+  const options = pieces.map((p) => spotsFor(p.cells, n));
+  const search = (lo: number, hi: number, left: number[]): boolean => {
     if (left.length === 0) return true;
     for (let i = 0; i < left.length; i++) {
       const rest = left.filter((_, k) => k !== i);
-      for (let row = 0; row < b.size; row++) {
-        for (let col = 0; col < b.size; col++) {
-          if (!canPlace(b, left[i].cells, row, col)) continue;
-          if (--budget <= 0) return true;
-          const placed = place(b, left[i].cells, row, col, 0);
-          const lines = findFullLines(placed);
-          if (search(lineCount(lines) > 0 ? clearLines(placed, lines) : placed, rest)) return true;
-        }
+      for (const spot of options[left[i]]) {
+        if ((lo & spot.lo) !== 0 || (hi & spot.hi) !== 0) continue;
+        if (--budget <= 0) return true;
+        const next = placeAndClear(lo, hi, spot, n);
+        if (search(next.lo, next.hi, rest)) return true;
       }
     }
     return false;
   };
-  return search(board, pieces);
+  const start = boardBits(board);
+  return search(
+    start.lo,
+    start.hi,
+    pieces.map((_, i) => i),
+  );
 }
 
-export function toughSetChance(score: number): number {
+function toughSetChance(score: number): number {
   const { minScore, chance, rampFrom, rampChance, rampEvery, rampAdd, maxChance } = balance.toughSet;
   if (score < minScore) return 0;
   if (score < rampFrom) return chance;

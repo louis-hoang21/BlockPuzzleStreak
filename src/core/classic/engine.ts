@@ -182,7 +182,7 @@ export function rotate(state: ClassicState, dir = 1): ClassicState {
   return state;
 }
 
-export function dropDistance(state: ClassicState): number {
+function dropDistance(state: ClassicState): number {
   if (!state.active) return 0;
   let d = 0;
   while (fits(state, { ...state.active, row: state.active.row + d + 1 })) d++;

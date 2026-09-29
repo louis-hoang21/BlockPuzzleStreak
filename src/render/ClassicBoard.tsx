@@ -1,5 +1,5 @@
 import { BlurMask, Canvas, createPicture, Group, Picture, rect, RoundedRect } from '@shopify/react-native-skia';
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import {
   cancelAnimation,
   Easing,
@@ -71,7 +71,7 @@ function MiniPiece({
   );
 }
 
-export function ClassicBoard({ layout, state, clearing, theme, skin }: Props) {
+function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
   const { cell, boardX, boardY, boardW, boardH, framePad, sideX, sideW, sideCell, holdY, nextY, boxH } = layout;
   const { cols, hidden } = state;
   const yOf = (row: number) => boardY + (row - hidden) * cell;
@@ -293,3 +293,5 @@ export function ClassicBoard({ layout, state, clearing, theme, skin }: Props) {
     </Canvas>
   );
 }
+
+export const ClassicBoard = memo(ClassicBoardView);

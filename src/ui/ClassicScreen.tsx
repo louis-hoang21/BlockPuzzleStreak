@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/refs, react-hooks/immutability, react-hooks/preserve-manual-memoization */
 import { router, useFocusEffect } from 'expo-router';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
@@ -26,7 +26,15 @@ import { Fireworks } from '../render/Fireworks';
 import { ThemeBackdrop } from '../render/Backdrops';
 import { ClassicBoard, CLEAR_MS, type ClassicClear } from '../render/ClassicBoard';
 import { computeClassicLayout, type ClassicLayout } from '../render/classicLayout';
-import { COLORS, hudColors, rotationBadgeColor, skinById, STAGE_LOOKS, themeById } from '../render/theme';
+import {
+  COLORS,
+  hudColors,
+  rotationBadgeColor,
+  skinById,
+  STAGE_LOOKS,
+  themeById,
+  type BoardTheme,
+} from '../render/theme';
 import { useClassicStore } from '../store/classicStore';
 import { useRecordsStore } from '../store/recordsStore';
 import { useNoticeStore } from '../store/noticeStore';
@@ -304,6 +312,11 @@ export function ClassicScreen() {
     soft.current = on;
   }, []);
 
+  const onPausePress = useCallback(() => {
+    hapticTap();
+    pause();
+  }, [pause]);
+
   const cell = layout?.cell ?? 30;
   const movedX = useSharedValue(0);
   const softOn = useSharedValue(false);
@@ -383,48 +396,16 @@ export function ClassicScreen() {
     >
       <StageBackground color={stageLook?.background ?? null} />
       {theme.backdrop && <ThemeBackdrop kind={theme.backdrop} />}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back" style={styles.iconButton}>
-          <SymbolView name="chevron.left" size={22} tintColor={hud.text} style={styles.icon} />
-        </Pressable>
-        <View style={styles.scoreBox}>
-          <Text
-            style={[styles.score, { color: hud.text }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.5}
-          >
-            {view.score.toLocaleString()}
-          </Text>
-          <View style={styles.bestRow}>
-            <SymbolView name="crown.fill" size={14} tintColor={hud.accent} style={styles.bestIcon} />
-            <Text style={[styles.best, { color: hud.accent }]} numberOfLines={1}>
-              {best.toLocaleString()}
-            </Text>
-            <Text style={[styles.sub, { color: hud.textDim }]}>
-              {' '}
-              · Cấp {view.level} · {view.lines} hàng
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          onPress={() => {
-            hapticTap();
-            pause();
-          }}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Tạm dừng"
-          disabled={!running}
-          style={({ pressed }) => [
-            styles.pauseButton,
-            { backgroundColor: rotationBadgeColor(theme) },
-            (pressed || !running) && { opacity: 0.6 },
-          ]}
-        >
-          <SymbolView name="pause.fill" size={16} tintColor={COLORS.text} style={styles.pauseIcon} />
-        </Pressable>
-      </View>
+      <ClassicHeader
+        score={view.score}
+        best={best}
+        level={view.level}
+        lines={view.lines}
+        tone={stageLook?.tone ?? theme.tone}
+        theme={theme}
+        running={running}
+        onPause={onPausePress}
+      />
 
       <View style={styles.boardArea} onLayout={onLayout}>
         {layout && (
@@ -473,20 +454,14 @@ export function ClassicScreen() {
       </View>
 
       {showButtons && (
-        <View style={styles.controls}>
-          <ControlButton icon="arrow.left" label="Sang trái" repeat onPress={() => onMove(-1)} disabled={!running} />
-          <ControlButton icon="arrow.clockwise" label="Xoay" onPress={onRotate} disabled={!running} />
-          <ControlButton icon="arrow.right" label="Sang phải" repeat onPress={() => onMove(1)} disabled={!running} />
-          <ControlButton
-            icon="arrow.down"
-            label="Rơi nhanh"
-            onPress={() => undefined}
-            onHoldChange={setSoft}
-            disabled={!running}
-          />
-          <ControlButton icon="arrow.down.to.line" label="Thả thẳng" onPress={onHardDrop} disabled={!running} />
-          <ControlButton icon="tray.and.arrow.down.fill" label="Giữ khối" onPress={onHold} disabled={!running} />
-        </View>
+        <ControlBar
+          running={running}
+          onMove={onMove}
+          onRotate={onRotate}
+          onSoft={setSoft}
+          onHardDrop={onHardDrop}
+          onHold={onHold}
+        />
       )}
 
       {!view.over && phase !== 'running' && (
@@ -534,6 +509,95 @@ export function ClassicScreen() {
     </View>
   );
 }
+
+const ClassicHeader = memo(function ClassicHeader({
+  score,
+  best,
+  level,
+  lines,
+  tone,
+  theme,
+  running,
+  onPause,
+}: {
+  score: number;
+  best: number;
+  level: number;
+  lines: number;
+  tone: 'dark' | 'light';
+  theme: BoardTheme;
+  running: boolean;
+  onPause: () => void;
+}) {
+  const hud = hudColors(tone);
+  return (
+    <View style={styles.header}>
+      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back" style={styles.iconButton}>
+        <SymbolView name="chevron.left" size={22} tintColor={hud.text} style={styles.icon} />
+      </Pressable>
+      <View style={styles.scoreBox}>
+        <Text style={[styles.score, { color: hud.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+          {score.toLocaleString()}
+        </Text>
+        <View style={styles.bestRow}>
+          <SymbolView name="crown.fill" size={14} tintColor={hud.accent} style={styles.bestIcon} />
+          <Text style={[styles.best, { color: hud.accent }]} numberOfLines={1}>
+            {best.toLocaleString()}
+          </Text>
+          <Text style={[styles.sub, { color: hud.textDim }]}>
+            {' '}
+            · Cấp {level} · {lines} hàng
+          </Text>
+        </View>
+      </View>
+      <Pressable
+        onPress={onPause}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Tạm dừng"
+        disabled={!running}
+        style={({ pressed }) => [
+          styles.pauseButton,
+          { backgroundColor: rotationBadgeColor(theme) },
+          (pressed || !running) && { opacity: 0.6 },
+        ]}
+      >
+        <SymbolView name="pause.fill" size={16} tintColor={COLORS.text} style={styles.pauseIcon} />
+      </Pressable>
+    </View>
+  );
+});
+
+const ControlBar = memo(function ControlBar({
+  running,
+  onMove,
+  onRotate,
+  onSoft,
+  onHardDrop,
+  onHold,
+}: {
+  running: boolean;
+  onMove: (steps: number) => void;
+  onRotate: () => void;
+  onSoft: (down: boolean) => void;
+  onHardDrop: () => void;
+  onHold: () => void;
+}) {
+  const left = useCallback(() => onMove(-1), [onMove]);
+  const right = useCallback(() => onMove(1), [onMove]);
+  return (
+    <View style={styles.controls}>
+      <ControlButton icon="arrow.left" label="Sang trái" repeat onPress={left} disabled={!running} />
+      <ControlButton icon="arrow.clockwise" label="Xoay" onPress={onRotate} disabled={!running} />
+      <ControlButton icon="arrow.right" label="Sang phải" repeat onPress={right} disabled={!running} />
+      <ControlButton icon="arrow.down" label="Rơi nhanh" onPress={noop} onHoldChange={onSoft} disabled={!running} />
+      <ControlButton icon="arrow.down.to.line" label="Thả thẳng" onPress={onHardDrop} disabled={!running} />
+      <ControlButton icon="tray.and.arrow.down.fill" label="Giữ khối" onPress={onHold} disabled={!running} />
+    </View>
+  );
+});
+
+const noop = () => {};
 
 function ControlButton({
   icon,

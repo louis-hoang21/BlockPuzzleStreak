@@ -14,10 +14,6 @@ export function createBoard(size: number): Board {
   return { size, cells: new Array<number>(size * size).fill(0) };
 }
 
-export function cellAt(board: Board, row: number, col: number): number {
-  return board.cells[row * board.size + col];
-}
-
 export function canPlace(board: Board, shape: Shape, row: number, col: number): boolean {
   const { size, cells } = board;
   for (const [r, c] of shape) {
@@ -71,11 +67,6 @@ export function clearLines(board: Board, lines: Lines): Board {
   for (const r of lines.rows) for (let c = 0; c < size; c++) cells[r * size + c] = 0;
   for (const c of lines.cols) for (let r = 0; r < size; r++) cells[r * size + c] = 0;
   return { size, cells };
-}
-
-export function previewPlacement(board: Board, shape: Shape, row: number, col: number): Lines | null {
-  if (!canPlace(board, shape, row, col)) return null;
-  return findFullLines(place(board, shape, row, col, 0));
 }
 
 export function isEmpty(board: Board): boolean {

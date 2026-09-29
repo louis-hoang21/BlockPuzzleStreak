@@ -34,7 +34,7 @@ export interface Backend {
   set: (key: string, value: string) => void;
 }
 
-export const mmkvBackend: Backend = {
+const mmkvBackend: Backend = {
   get: (key) => storage.getString(key),
   set: (key, value) => storage.set(key, value),
 };

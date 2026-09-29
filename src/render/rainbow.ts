@@ -1,6 +1,6 @@
 import { BlurStyle, PaintStyle, Skia, TileMode, vec, type SkCanvas } from '@shopify/react-native-skia';
 
-export const RAINBOW = ['#FF4D4D', '#FF9F1C', '#FFE14D', '#4DDB6B', '#3DB8FF', '#8F6BFF', '#FF5FD2', '#FF4D4D'];
+const RAINBOW = ['#FF4D4D', '#FF9F1C', '#FFE14D', '#4DDB6B', '#3DB8FF', '#8F6BFF', '#FF5FD2', '#FF4D4D'];
 export const RAINBOW_MS = 1400;
 
 export type Box = [x: number, y: number, w: number, h: number];
