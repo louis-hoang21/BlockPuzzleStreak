@@ -3,7 +3,7 @@
     "name": "Block Puzzle: Streak",
     "slug": "block-puzzle-streak",
     "scheme": "blockpuzzlestreak",
-    "version": "1.0.5",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,8 @@
       "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
-        "CFBundleDisplayName": "Block Streak"
+        "CFBundleDisplayName": "Block Streak",
+        "CADisableMinimumFrameDurationOnPhone": true
       },
       "config": {
         "usesNonExemptEncryption": false

@@ -2,7 +2,7 @@
   "cols": 9,
   "rows": 18,
   "hiddenRows": 2,
-  "preview": 3,
+  "preview": 2,
   "lockDelayMs": 500,
   "maxLockResets": 15,
   "linesPerLevel": 10,

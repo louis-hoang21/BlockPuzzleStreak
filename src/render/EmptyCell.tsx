@@ -11,11 +11,11 @@ interface Props {
 }
 
 export function EmptyCell({ x, y, size, theme }: Props) {
-  const inset = 2;
+  const inset = Math.max(0.5, size * 0.015);
   const s = size - inset * 2;
   const x0 = x + inset;
   const y0 = y + inset;
-  const r = size * 0.14;
+  const r = size * 0.04;
 
   if (theme.emptyCellStyle !== 'sunset') {
     return <RoundedRect x={x0} y={y0} width={s} height={s} r={r} color={theme.emptyCell} />;

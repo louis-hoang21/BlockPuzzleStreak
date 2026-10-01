@@ -20,20 +20,21 @@ export interface ClassicLayout {
 
 export function computeClassicLayout(width: number, height: number): ClassicLayout {
   const framePad = 8;
-  const pad = 16;
-  const gap = 10;
-  const sideRatio = 0.55 * 4 + 0.6;
+  const pad = 8;
+  const gap = 8;
+  const sideScale = 0.34;
+  const sideRatio = sideScale * 4 + 0.4;
   const byWidth = (width - pad * 2 - framePad * 2 - gap - framePad * 2) / (cfg.cols + sideRatio);
-  const byHeight = (height - framePad * 2 - 16) / cfg.rows;
+  const byHeight = (height - framePad * 2 - 8) / cfg.rows;
   const cell = Math.floor(Math.min(byWidth, byHeight));
   const boardW = cell * cfg.cols;
   const boardH = cell * cfg.rows;
-  const sideCell = Math.floor(cell * 0.55);
+  const sideCell = Math.floor(cell * sideScale);
   const sideW = Math.round(cell * sideRatio);
   const total = boardW + framePad * 2 + gap + sideW + framePad * 2;
   const left = (width - total) / 2;
   const boardX = left + framePad;
-  const boardY = (height - boardH) / 2;
+  const boardY = framePad + 4;
   const sideX = boardX + boardW + framePad + gap + framePad;
   const labelH = 20;
   const boxH = sideCell * 3;

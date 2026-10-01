@@ -14,21 +14,21 @@ export interface BoardLayout {
   trayWidth: number;
   trayCell: number;
   slotWidth: number;
-  lift: number;
+  liftGap: number;
 }
 
 const MAX_PIECE_CELLS = 6;
 
 export function computeLayout(width: number, height: number): BoardLayout {
   const n = balance.gridSize;
-  const sidePad = 20;
+  const sidePad = 12;
   const framePad = 8;
-  const cell = Math.floor(Math.min((width - sidePad * 2 - framePad * 2) / n, (height * 0.6) / n));
+  const cell = Math.floor(Math.min((width - sidePad * 2 - framePad * 2) / n, (height * 0.66) / n));
   const boardSize = cell * n;
   const gap = cell * 0.8;
   const trayHeight = cell * 3;
   const total = framePad * 2 + boardSize + gap + trayHeight;
-  const top = Math.max(0, (height - total) / 2);
+  const top = Math.max(0, Math.min((height - total) / 2, cell * 0.3));
   const boardX = (width - boardSize) / 2;
   const boardY = top + framePad;
   const trayX = boardX - framePad;
@@ -53,7 +53,7 @@ export function computeLayout(width: number, height: number): BoardLayout {
     trayWidth,
     trayCell,
     slotWidth,
-    lift: cell * 2,
+    liftGap: cell * 1.2,
   };
 }
 

@@ -30,7 +30,7 @@ const STEPS: Step[] = [
   {
     icon: 'star.fill',
     title: 'Vượt mốc điểm',
-    body: 'Mỗi ván, đạt 5.000, 25.000, 30.000, 40.000, 50.000 điểm được thêm lượt xoay. Điểm cao còn mở khoá theme và skin mới.',
+    body: 'Mỗi ván bắt đầu với 0 lượt xoay, thua là mất hết. Đạt 5.000, 10.000, 15.000, 20.000, 25.000, 30.000, 40.000, 50.000 điểm được thêm lượt xoay. Điểm cao còn mở khoá theme và skin mới.',
   },
 ];
 
@@ -58,14 +58,16 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
           ))}
         </View>
-        <Pressable style={styles.primary} onPress={next} accessibilityRole="button">
-          <Text style={styles.primaryText}>{last ? 'Bắt đầu chơi' : 'Tiếp'}</Text>
-        </Pressable>
-        {!last && (
-          <Pressable style={styles.skip} onPress={onDone} accessibilityRole="button">
-            <Text style={styles.skipText}>Bỏ qua</Text>
+        <View style={styles.buttonRow}>
+          {!last && (
+            <Pressable style={styles.skip} onPress={onDone} accessibilityRole="button">
+              <Text style={styles.skipText}>Bỏ qua</Text>
+            </Pressable>
+          )}
+          <Pressable style={styles.primary} onPress={next} accessibilityRole="button">
+            <Text style={styles.primaryText}>{last ? 'Bắt đầu chơi' : 'Tiếp'}</Text>
           </Pressable>
-        )}
+        </View>
       </View>
     </View>
   );
@@ -79,7 +81,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  card: { width: '100%', maxWidth: 340, borderRadius: 24, padding: 24, backgroundColor: '#262D57', alignItems: 'center' },
+  card: { width: '100%', maxWidth: 320, borderRadius: 22, padding: 20, backgroundColor: '#262D57', alignItems: 'center' },
   iconWrap: {
     width: 76,
     height: 76,
@@ -94,15 +96,22 @@ const styles = StyleSheet.create({
   dots: { flexDirection: 'row', gap: 6, marginTop: 20 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3A4275' },
   dotActive: { backgroundColor: COLORS.accent, width: 20 },
+  buttonRow: { flexDirection: 'row', alignSelf: 'stretch', gap: 10, marginTop: 20 },
   primary: {
-    marginTop: 20,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 999,
-    paddingVertical: 14,
+    paddingVertical: 9,
     backgroundColor: '#3DCB4A',
     alignItems: 'center',
   },
-  primaryText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
-  skip: { marginTop: 8, paddingVertical: 8 },
-  skipText: { color: COLORS.textDim, fontSize: 15, fontWeight: '700' },
+  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  skip: {
+    flex: 1,
+    borderRadius: 999,
+    paddingVertical: 9,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
+    alignItems: 'center',
+  },
+  skipText: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
 });

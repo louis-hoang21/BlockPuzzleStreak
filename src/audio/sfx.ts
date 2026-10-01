@@ -11,6 +11,7 @@ const SOURCES = {
   combo4: require('../../assets/sounds/combo4.m4a'),
   gameOver: require('../../assets/sounds/gameover.m4a'),
   newRecord: require('../../assets/sounds/newRecord.m4a'),
+  newRecordWin: require('../../assets/sounds/newRecordWin.m4a'),
   tieRecord: require('../../assets/sounds/tieRecord.m4a'),
   rotate: require('../../assets/sounds/rotate.m4a'),
   fireworks: require('../../assets/sounds/fireworks.m4a'),

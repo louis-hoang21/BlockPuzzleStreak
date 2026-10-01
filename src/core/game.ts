@@ -29,10 +29,12 @@ export interface GameState {
   board: Board;
   tray: (Piece | null)[];
   score: number;
+  banked?: number;
   combo: number;
   rotations: number;
   rngState: number;
   seed?: number;
+  setColors?: number[];
   stats: GameStats;
   over: boolean;
 }
@@ -45,7 +47,7 @@ export interface PlaceResult {
   refilled: boolean;
 }
 
-export function newGame(seed: number, rotations: number, board: Board = createBoard(balance.gridSize)): GameState {
+export function newGame(seed: number, board: Board = createBoard(balance.gridSize)): GameState {
   const rng = createRng(seed);
   const tray = nextPieceSet(rng.next, board, 0);
   return {
@@ -53,9 +55,10 @@ export function newGame(seed: number, rotations: number, board: Board = createBo
     tray,
     score: 0,
     combo: 0,
-    rotations,
+    rotations: balance.startingRotations,
     rngState: rng.state(),
     seed,
+    setColors: tray.map((p) => p.color),
     stats: {
       placements: 0,
       linesCleared: 0,
@@ -77,14 +80,17 @@ export function placePiece(state: GameState, slot: number, row: number, col: num
   const n = lineCount(cleared);
   const board = n > 0 ? clearLines(placed, cleared) : placed;
   const perfectClear = n > 0 && isEmpty(board);
-  const score = scorePlacement(piece.cells.length, n, state.combo, perfectClear);
+  const score = scorePlacement(piece.cells.length, n, state.combo, perfectClear, state.banked ?? 0);
 
   let tray = state.tray.map((p, i) => (i === slot ? null : p));
   let rngState = state.rngState;
+  let setColors = state.setColors;
   const refilled = tray.every((p) => p === null);
   if (refilled) {
     const rng = createRng(rngState);
-    tray = nextPieceSet(rng.next, board, state.score + score.total);
+    const fresh = nextPieceSet(rng.next, board, state.score + score.total, setColors);
+    tray = fresh;
+    setColors = fresh.map((p) => p.color);
     rngState = rng.state();
   }
 
@@ -101,11 +107,13 @@ export function placePiece(state: GameState, slot: number, row: number, col: num
     board,
     tray,
     score: state.score + score.total,
+    banked: score.banked,
     combo: score.combo,
     rngState,
+    setColors,
     stats,
   };
-  next.over = !hasMove(next.board, next.tray);
+  next.over = isOver(next);
   return { state: next, score, cleared, placed, refilled };
 }
 
@@ -122,12 +130,33 @@ export function rotatePiece(state: GameState, slot: number): GameState | null {
     rotations: state.rotations - 1,
     stats: { ...state.stats, rotationsUsed: state.stats.rotationsUsed + 1 },
   };
-  next.over = !hasMove(next.board, next.tray);
+  next.over = isOver(next);
   return next;
 }
 
 export function hasMove(board: Board, tray: readonly (Piece | null)[]): boolean {
   return tray.some((piece) => piece !== null && canFitAnywhere(board, piece.cells));
+}
+
+export function rescueSlots(state: GameState): number[] {
+  const slots: number[] = [];
+  state.tray.forEach((piece, slot) => {
+    if (!piece) return;
+    let cells = piece.cells;
+    for (let turn = 1; turn <= Math.min(3, state.rotations); turn++) {
+      cells = rotateCW(cells);
+      if (sameShape(cells, piece.cells)) return;
+      if (canFitAnywhere(state.board, cells)) {
+        slots.push(slot);
+        return;
+      }
+    }
+  });
+  return slots;
+}
+
+export function isOver(state: GameState): boolean {
+  return !hasMove(state.board, state.tray) && rescueSlots(state).length === 0;
 }
 
 export function addRotations(current: number, amount: number): { rotations: number; added: number } {

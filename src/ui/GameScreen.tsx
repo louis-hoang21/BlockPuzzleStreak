@@ -17,8 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { comboSfx, initSfx, playSfx } from '../audio/sfx';
 import { markReviewPromptShown, requestStoreReview, reviewPromptDelay } from '../review/reviewPrompt';
 import { solidRect, type Board, type CellRect } from '../core/board';
-import type { PlaceResult } from '../core/game';
-import { nextRotationMilestone } from '../core/milestones';
+import { hasMove, rescueSlots, type PlaceResult } from '../core/game';
 import { stageAt, stageColor } from '../core/stages';
 import {
   hapticCelebrate,
@@ -35,8 +34,7 @@ import { GameBoard, type ClearEvent, type ClearingCell } from '../render/GameBoa
 import { computeLayout, type BoardLayout } from '../render/layout';
 import { COLORS, hudColors, rotationBadgeColor, skinById, STAGE_LOOKS, themeById } from '../render/theme';
 import { useGameStore, type Mode } from '../store/gameStore';
-import { useNoticeStore, type RewardKind } from '../store/noticeStore';
-import { useProgressStore } from '../store/progressStore';
+import { useNoticeStore, type Notice, type NoticeTone, type RewardKind } from '../store/noticeStore';
 import { useRecordsStore, type GameResult } from '../store/recordsStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { gameOverLine, type LineTone } from './gameOverLines';
@@ -54,6 +52,7 @@ interface ComboEvent {
 }
 
 const GAME_OVER_DELAY_MS = 700;
+const NO_SLOTS: number[] = [];
 
 const LINE_ICONS = {
   newBest: { name: 'crown.fill', color: '#FFD84D' },
@@ -68,22 +67,24 @@ const BADGE_PULSE_MS = 3000;
 const BADGE_PULSES = 6;
 const STAGE_SFX_DELAY_MS = 350;
 const STAGE_FADE_MS = 700;
-const CARD_LOOKS = {
-  newBest: { bg: '#1E6B3F', button: '#FFD84D', buttonText: '#1B1F3B' },
-  tied: { bg: '#262D57', button: '#3DCB4A', buttonText: '#FFFFFF' },
-  below: { bg: '#5A2438', button: '#3DCB4A', buttonText: '#FFFFFF' },
+const CARD_LOOK = {
+  bg: '#5A2438',
+  button: '#3DCB4A',
+  buttonText: '#FFFFFF',
 } as const;
-const REWARD_DELAY_MS = 450;
-const REWARD_MS = 2800;
+const REWARD_DELAY_MS = 250;
+const REWARD_MS = 1600;
+const APPLY_PROMPT_MS = 3000;
+const ROTATION_GAIN_MS = 1600;
 const REWARD_ICONS = {
   rotation: {
     name: 'arrow.clockwise.circle.fill',
     color: '#3DCB4A',
     title: 'Thêm lượt xoay!',
   },
-  theme: { name: 'paintpalette.fill', color: '#4FC3F7', title: 'Theme mới!' },
-  skin: { name: 'sparkles', color: '#FF5FD2', title: 'Skin mới!' },
-} as const satisfies Record<RewardKind, { name: SFSymbol; color: string; title: string }>;
+  theme: { name: 'paintpalette.fill', color: '#4FC3F7' },
+  skin: { name: 'sparkles', color: '#FF5FD2' },
+} as const satisfies Record<RewardKind, { name: SFSymbol; color: string; title?: string }>;
 const RECORD_FIREWORKS_GAP_MS = 1100;
 const RECORD_SFX_DELAY_MS = 500;
 export const COMBO_SFX_DELAY_MS = 120;
@@ -125,10 +126,10 @@ function popupLabel(result: PlaceResult): string | null {
 export function GameScreen({ mode }: { mode: Mode }) {
   const insets = useSafeAreaInsets();
   const { game, result } = useGameStore((s) => s.modes[mode]);
+  const rotations = game.rotations;
   const placeIn = useGameStore((s) => s.place);
   const rotateIn = useGameStore((s) => s.rotate);
   const startIn = useGameStore((s) => s.start);
-  const rotations = useProgressStore((s) => s.rotations);
   const bestScore = useRecordsStore((s) => s.byMode[mode].bestScore);
   const best = Math.max(bestScore, game.score);
   const notice = useNoticeStore((s) => s.queue[0]);
@@ -160,23 +161,40 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const [fireworks, setFireworks] = useState<number | null>(null);
   const eventId = useRef(0);
   const over = useGameOverFlow(game.over, result);
+  const giveUpIn = useGameStore((s) => s.giveUp);
+  const stuck = !game.over && !hasMove(game.board, game.tray);
+  const [offer, setOffer] = useState(false);
+  const [rescuing, setRescuing] = useState(false);
+  if (!stuck && (offer || rescuing)) {
+    setOffer(false);
+    setRescuing(false);
+  }
+  useEffect(() => {
+    if (!stuck || rescuing) return;
+    const t = setTimeout(() => {
+      hapticWarning();
+      setOffer(true);
+    }, GAME_OVER_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [stuck, rescuing]);
+  const hintSlots = useMemo(() => (rescuing && stuck ? rescueSlots(game) : NO_SLOTS), [rescuing, stuck, game]);
 
   useEffect(() => {
     initSfx();
     useGameStore.getState().resume(mode);
   }, [mode]);
 
-  const nextMilestone = nextRotationMilestone(game.score);
-
   const badgePulse = useSharedValue(1);
-  const badgeStyle = useAnimatedStyle(() => ({ transform: [{ scale: badgePulse.value }] }));
+  const badgeStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: badgePulse.value }],
+  }));
   useEffect(() => {
-    if (useProgressStore.getState().rotations < 1) return;
+    if (useGameStore.getState().modes[mode].game.rotations < 1) return;
     const beat = BADGE_PULSE_MS / BADGE_PULSES / 2;
     badgePulse.set(
       withRepeat(withSequence(withTiming(1.25, { duration: beat }), withTiming(1, { duration: beat })), BADGE_PULSES),
     );
-  }, [game.seed, badgePulse]);
+  }, [mode, game.seed, badgePulse]);
   const stage = stageColor(stageAt(game.score), game.seed ?? 0);
   const stageLook = stage ? STAGE_LOOKS[stage] : null;
   const hud = hudColors(stageLook?.tone ?? theme.tone);
@@ -196,7 +214,13 @@ export function GameScreen({ mode }: { mode: Mode }) {
       const id = ++eventId.current;
       const { lines, combo, perfectClearPoints, total } = result.score;
       if (lines > 0) {
-        setClearing({ id, cells: clearedCells(result), rows: result.cleared.rows, cols: result.cleared.cols, lines });
+        setClearing({
+          id,
+          cells: clearedCells(result),
+          rows: result.cleared.rows,
+          cols: result.cleared.cols,
+          lines,
+        });
         setPopup({ id, points: total, label: popupLabel(result) });
         if (combo >= 2) setComboEvent({ id, combo });
         if (lines >= 2) setMultiLines({ id, lines });
@@ -278,14 +302,26 @@ export function GameScreen({ mode }: { mode: Mode }) {
       }
       return true;
     },
-    [mode, placeIn, shakeX, bestPulse, setFireworks],
+    [
+      mode,
+      placeIn,
+      shakeX,
+      bestPulse,
+      setFireworks,
+      setClearing,
+      setPopup,
+      setComboEvent,
+      setMultiLines,
+      setNiceEvent,
+      setRecordEvent,
+    ],
   );
 
   const onRotate = useCallback(
     (slot: number) => {
-      if (useProgressStore.getState().rotations <= 0) {
+      if (useGameStore.getState().modes[mode].game.rotations <= 0) {
         hapticWarning();
-        useNoticeStore.getState().push('Hết lượt xoay');
+        useNoticeStore.getState().push('Hết lượt xoay', undefined, undefined, 'error');
         return false;
       }
       if (!rotateIn(mode, slot)) return false;
@@ -295,6 +331,23 @@ export function GameScreen({ mode }: { mode: Mode }) {
     },
     [mode, rotateIn],
   );
+
+  const acceptRotate = () => {
+    hapticTap();
+    setOffer(false);
+    setRescuing(true);
+    const beat = BADGE_PULSE_MS / BADGE_PULSES / 2;
+    badgePulse.set(
+      withRepeat(withSequence(withTiming(1.25, { duration: beat }), withTiming(1, { duration: beat })), BADGE_PULSES),
+    );
+    useNoticeStore.getState().push('Chạm vào khối đang nhấp nhô để xoay');
+  };
+
+  const declineRotate = () => {
+    hapticTap();
+    setOffer(false);
+    giveUpIn(mode);
+  };
 
   const restart = () => {
     hapticTap();
@@ -346,25 +399,18 @@ export function GameScreen({ mode }: { mode: Mode }) {
             >
               {best.toLocaleString()}
             </Text>
-            {nextMilestone !== null && (
-              <Text style={[styles.milestone, { color: hud.textDim }]}>
-                {' '}
-                · +1 xoay ở {nextMilestone.toLocaleString()}
-              </Text>
-            )}
           </Animated.View>
+          {notice && !notice.reward && (
+            <Toast key={`toast-${notice.id}`} text={notice.text} tone={notice.tone} compact />
+          )}
         </View>
         <Animated.View style={badgeStyle}>
           <Pressable
             onPress={() => {
               hapticTap();
-              useNoticeStore
-                .getState()
-                .push(
-                  rotations > 0
-                    ? `Chạm vào khối trong khay để xoay (còn ${rotations} lượt)`
-                    : 'Hết lượt xoay. Vượt mốc điểm để nhận thêm',
-                );
+              const notices = useNoticeStore.getState();
+              if (rotations > 0) notices.push(`Chạm vào khối trong khay để xoay (còn ${rotations} lượt)`);
+              else notices.push('Hết lượt xoay. Vượt mốc điểm để nhận thêm', undefined, undefined, 'error');
             }}
             hitSlop={8}
             accessibilityRole="button"
@@ -385,6 +431,17 @@ export function GameScreen({ mode }: { mode: Mode }) {
             <Text style={styles.rotationsText}>{rotations}</Text>
           </Pressable>
         </Animated.View>
+        {notice?.reward === 'rotation' && (
+          <RotationGain
+            key={`gain-${notice.id}`}
+            text={notice.text}
+            onShow={() =>
+              badgePulse.set(
+                withRepeat(withSequence(withTiming(1.25, { duration: 150 }), withTiming(1, { duration: 150 })), 3),
+              )
+            }
+          />
+        )}
       </View>
 
       <View style={styles.boardArea} onLayout={onLayout}>
@@ -395,43 +452,55 @@ export function GameScreen({ mode }: { mode: Mode }) {
               board={game.board}
               tray={game.tray}
               clearing={clearing}
-              disabled={game.over || !onboarded}
+              disabled={game.over || !onboarded || offer}
               onDrop={onDrop}
               onRotate={onRotate}
+              hintSlots={hintSlots}
               theme={theme}
               skin={skin}
             />
           </Animated.View>
         )}
         {layout && fireworks !== null && <Fireworks id={fireworks} width={layout.width} height={layout.height} />}
-        {notice && !notice.reward && <Toast key={notice.id} text={notice.text} />}
-        {layout && notice?.reward && (
+        {layout && notice?.reward && notice.reward !== 'rotation' && !notice.apply && (
           <RewardPopup
-            key={notice.id}
+            key={`reward-${notice.id}`}
             kind={notice.reward}
             text={notice.text}
             top={layout.boardY + layout.boardSize * 0.12}
             onShow={() => setFireworks(++eventId.current)}
           />
         )}
-        {layout && popup && <ScorePopup key={popup.id} popup={popup} top={layout.boardY + layout.boardSize / 2 - 40} />}
+        {layout && popup && (
+          <ScorePopup key={`score-${popup.id}`} popup={popup} top={layout.boardY + layout.boardSize / 2 - 40} />
+        )}
         {layout && niceEvent && (
           <HeartPop
-            key={niceEvent.id}
+            key={`heart-${niceEvent.id}`}
             x={layout.boardX + (niceEvent.rect.col + niceEvent.rect.cols / 2) * layout.cell}
             y={layout.boardY + (niceEvent.rect.row + niceEvent.rect.rows / 2) * layout.cell}
           />
         )}
         {layout && recordEvent !== null && (
-          <RecordBanner key={recordEvent} top={Math.max(0, layout.boardY + layout.boardSize / 2 - 200)} />
+          <RecordBanner key={`record-${recordEvent}`} top={Math.max(0, layout.boardY + layout.boardSize / 2 - 200)} />
         )}
         {layout && multiLines && (
-          <LinesBanner key={multiLines.id} lines={multiLines.lines} top={layout.boardY + layout.boardSize / 2 + 20} />
+          <LinesBanner
+            key={`lines-${multiLines.id}`}
+            lines={multiLines.lines}
+            top={layout.boardY + layout.boardSize / 2 + 20}
+          />
         )}
         {layout && comboEvent && (
-          <ComboBanner key={comboEvent.id} combo={comboEvent.combo} top={layout.boardY + layout.boardSize / 2 - 130} />
+          <ComboBanner
+            key={`combo-${comboEvent.id}`}
+            combo={comboEvent.combo}
+            top={layout.boardY + layout.boardSize / 2 - 130}
+          />
         )}
       </View>
+
+      {offer && stuck && !rescuing && <RotateOffer rotations={rotations} onUse={acceptRotate} onSkip={declineRotate} />}
 
       {over.showGameOver && (
         <GameOverOverlay
@@ -441,7 +510,10 @@ export function GameScreen({ mode }: { mode: Mode }) {
           losses={losses}
           stats={[
             { label: 'Hàng nổ', value: game.stats.linesCleared },
-            { label: 'Combo cao nhất', value: game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–' },
+            {
+              label: 'Combo cao nhất',
+              value: game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–',
+            },
             { label: 'Lượt đặt', value: game.stats.placements },
           ]}
           recordFireworks={over.recordFireworks}
@@ -450,6 +522,8 @@ export function GameScreen({ mode }: { mode: Mode }) {
           onRestart={restart}
         />
       )}
+
+      {notice?.apply && <ApplyPrompt key={notice.id} notice={notice} />}
 
       {!onboarded && <Onboarding onDone={() => useSettingsStore.getState().update({ onboarded: true })} />}
     </View>
@@ -467,7 +541,7 @@ export function useGameOverFlow(isOver: boolean, result: GameResult | null) {
     const t = setTimeout(() => {
       if (result?.newBest) {
         hapticCelebrate();
-        playSfx('newRecord');
+        playSfx('newRecordWin');
         setRecordFireworks(++ids.current);
         timers.push(setTimeout(() => setRecordFireworks(++ids.current), RECORD_FIREWORKS_GAP_MS));
       } else {
@@ -521,7 +595,6 @@ export function GameOverOverlay({
   onRestart: () => void;
 }) {
   const screen = useWindowDimensions();
-  const cardLook = result?.newBest ? CARD_LOOKS.newBest : result?.tiedBest ? CARD_LOOKS.tied : CARD_LOOKS.below;
   const overLine = useMemo(
     () => (result ? gameOverLine(score, best, result.newBest, losses) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -530,7 +603,7 @@ export function GameOverOverlay({
   return (
     <>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: cardLook.bg }]}>
+        <View style={[styles.card, { backgroundColor: CARD_LOOK.bg }]}>
           <Text style={styles.cardTitle}>Hết chiêuuuu</Text>
           {result?.newBest && <NewBestBadge />}
           <Text style={styles.cardScore} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
@@ -553,12 +626,14 @@ export function GameOverOverlay({
               <Stat key={st.label} label={st.label} value={st.value} />
             ))}
           </View>
-          <Pressable style={[styles.primaryButton, { backgroundColor: cardLook.button }]} onPress={onRestart}>
-            <Text style={[styles.primaryText, { color: cardLook.buttonText }]}>Chơi lại</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-            <Text style={styles.secondaryText}>Về menu</Text>
-          </Pressable>
+          <View style={styles.buttonRow}>
+            <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+              <Text style={styles.secondaryText}>Về menu</Text>
+            </Pressable>
+            <Pressable style={[styles.primaryButton, { backgroundColor: CARD_LOOK.button }]} onPress={onRestart}>
+              <Text style={[styles.primaryText, { color: CARD_LOOK.buttonText }]}>Chơi lại</Text>
+            </Pressable>
+          </View>
         </View>
         {recordFireworks !== null && <Fireworks id={recordFireworks} width={screen.width} height={screen.height} />}
       </View>
@@ -579,6 +654,28 @@ export function GameOverOverlay({
   );
 }
 
+function RotateOffer({ rotations, onUse, onSkip }: { rotations: number; onUse: () => void; onSkip: () => void }) {
+  const icon = REWARD_ICONS.rotation;
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
+      <View style={[styles.rewardCard, { borderColor: icon.color }]}>
+        <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
+        <Text style={styles.rewardTitle}>Khoan đã!</Text>
+        <Text style={styles.rewardText}>Bạn còn {rotations} lượt xoay chưa dùng</Text>
+        <Text style={styles.applyQuestion}>Xoay khối để đặt tiếp nhé?</Text>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={onSkip}>
+            <Text style={styles.secondaryText}>Không cần</Text>
+          </Pressable>
+          <Pressable style={styles.primaryButton} onPress={onUse}>
+            <Text style={styles.primaryText}>Xoay khối</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 function ReviewPrompt({ onRate, onLater }: { onRate: () => void; onLater: () => void }) {
   return (
     <Animated.View entering={FadeIn.duration(250)} style={styles.overlay}>
@@ -589,12 +686,14 @@ function ReviewPrompt({ onRate, onLater }: { onRate: () => void; onLater: () => 
           ))}
         </View>
         <Text style={styles.reviewTitle}>Bạn thích trò chơi chứ?</Text>
-        <Pressable style={styles.primaryButton} onPress={onRate}>
-          <Text style={styles.primaryText}>Đánh giá</Text>
-        </Pressable>
-        <Pressable style={styles.secondaryButton} onPress={onLater}>
-          <Text style={styles.secondaryText}>Để sau</Text>
-        </Pressable>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={onLater}>
+            <Text style={styles.secondaryText}>Để sau</Text>
+          </Pressable>
+          <Pressable style={styles.primaryButton} onPress={onRate}>
+            <Text style={styles.primaryText}>Đánh giá</Text>
+          </Pressable>
+        </View>
       </View>
     </Animated.View>
   );
@@ -609,7 +708,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-export function Toast({ text }: { text: string }) {
+export function Toast({ text, tone, compact = false }: { text: string; tone?: NoticeTone; compact?: boolean }) {
   const progress = useSharedValue(0);
   useEffect(() => {
     progress.value = withTiming(1, { duration: TOAST_MS });
@@ -619,9 +718,55 @@ export function Toast({ text }: { text: string }) {
   const style = useAnimatedStyle(() => ({
     opacity: progress.value < 0.1 ? progress.value * 10 : progress.value > 0.8 ? (1 - progress.value) * 5 : 1,
   }));
+  if (compact) {
+    return (
+      <Animated.View pointerEvents="none" style={[styles.toastCompactWrap, style]}>
+        <View style={[styles.toastCompact, tone === 'error' && styles.toastError]}>
+          <Text
+            style={[styles.toastCompactText, tone === 'error' && styles.toastErrorText]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {text}
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
   return (
     <Animated.View pointerEvents="none" style={[styles.toast, style]}>
       <Text style={styles.toastText}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+function RotationGain({ text, onShow }: { text: string; onShow: () => void }) {
+  const progress = useSharedValue(0);
+  useEffect(() => {
+    hapticCelebrate();
+    playSfx('fireworks');
+    onShow();
+    progress.set(withTiming(1, { duration: ROTATION_GAIN_MS }));
+    const t = setTimeout(() => useNoticeStore.getState().shift(), ROTATION_GAIN_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const style = useAnimatedStyle(() => ({
+    opacity: progress.value < 0.1 ? progress.value * 10 : progress.value > 0.8 ? (1 - progress.value) * 5 : 1,
+    transform: [{ translateY: (progress.value < 0.1 ? 1 - progress.value * 10 : 0) * -6 }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.rotationGain, style]}>
+      <SymbolView
+        name={REWARD_ICONS.rotation.name}
+        size={14}
+        tintColor={REWARD_ICONS.rotation.color}
+        style={styles.rotationGainIcon}
+      />
+      <Text style={styles.rotationGainText} numberOfLines={1}>
+        {text}
+      </Text>
     </Animated.View>
   );
 }
@@ -664,10 +809,41 @@ export function RewardPopup({
   return (
     <Animated.View pointerEvents="none" style={[styles.reward, { top }, style]}>
       <View style={[styles.rewardCard, { borderColor: icon.color }]}>
-        <SymbolView name={icon.name} size={44} tintColor={icon.color} style={styles.rewardIcon} />
-        <Text style={styles.rewardTitle}>{icon.title}</Text>
+        <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
+        {'title' in icon && <Text style={styles.rewardTitle}>{icon.title}</Text>}
         <Text style={styles.rewardText}>{text}</Text>
-        {kind !== 'rotation' && <Text style={styles.rewardHint}>Đã áp dụng. Đổi lại trong Bộ sưu tập</Text>}
+      </View>
+    </Animated.View>
+  );
+}
+
+export function ApplyPrompt({ notice }: { notice: Notice }) {
+  useEffect(() => {
+    hapticCelebrate();
+    playSfx('fireworks');
+    const t = setTimeout(() => useNoticeStore.getState().shift(), APPLY_PROMPT_MS);
+    return () => clearTimeout(t);
+  }, []);
+  const icon = REWARD_ICONS[notice.reward ?? 'skin'];
+  const answer = (yes: boolean) => {
+    hapticTap();
+    if (yes && notice.apply) useSettingsStore.getState().update(notice.apply);
+    useNoticeStore.getState().shift();
+  };
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
+      <View style={[styles.rewardCard, { borderColor: icon.color }]}>
+        <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
+        <Text style={styles.rewardText}>{notice.text}</Text>
+        <Text style={styles.applyQuestion}>Dùng ngay bây giờ?</Text>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={() => answer(false)}>
+            <Text style={styles.secondaryText}>Không</Text>
+          </Pressable>
+          <Pressable style={styles.primaryButton} onPress={() => answer(true)}>
+            <Text style={styles.primaryText}>Có</Text>
+          </Pressable>
+        </View>
       </View>
     </Animated.View>
   );
@@ -786,6 +962,15 @@ function HeartPop({ x, y }: { x: number; y: number }) {
   );
 }
 
+function StageFadeOut({ color }: { color: string }) {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.set(withTiming(0, { duration: STAGE_FADE_MS }));
+  }, [opacity]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: color }, style]} />;
+}
+
 export function StageBackground({ color }: { color: string | null }) {
   const [shown, setShown] = useState(color);
   const [from, setFrom] = useState(color);
@@ -793,7 +978,7 @@ export function StageBackground({ color }: { color: string | null }) {
     setFrom(shown);
     setShown(color);
   }
-  if (!shown) return null;
+  if (!shown) return from ? <StageFadeOut key={`out-${from}`} color={from} /> : null;
   return (
     <>
       {from && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: from }]} />}
@@ -830,6 +1015,7 @@ export function LinesBanner({ lines, top }: { lines: number; top: number }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
+    zIndex: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -864,7 +1050,6 @@ const styles = StyleSheet.create({
   heartIcon: { width: HEART_SIZE, height: HEART_SIZE },
   recordIcon: { width: 34, height: 34, marginRight: 8 },
   bestIcon: { width: 14, height: 14, marginRight: 4 },
-  milestone: { color: COLORS.textDim, fontSize: 13, fontWeight: '600' },
   best: {
     color: COLORS.accent,
     fontSize: 16,
@@ -881,6 +1066,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rotationsIcon: { width: 16, height: 16, marginRight: 4 },
+  rotationGain: {
+    position: 'absolute',
+    top: '100%',
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  },
+  rotationGainIcon: { width: 14, height: 14, marginRight: 4 },
+  rotationGainText: {
+    color: '#1B1F3B',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   rotationsText: {
     color: COLORS.text,
     fontSize: 16,
@@ -904,11 +1106,11 @@ const styles = StyleSheet.create({
   },
   reward: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   rewardCard: {
-    width: 280,
-    borderRadius: 22,
+    width: 260,
+    borderRadius: 20,
     borderWidth: 3,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     backgroundColor: 'rgba(38, 45, 87, 0.97)',
     alignItems: 'center',
     shadowColor: '#000',
@@ -916,27 +1118,62 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
   },
-  rewardIcon: { width: 44, height: 44 },
+  rewardIcon: { width: 36, height: 36 },
   rewardTitle: {
     color: '#FFD84D',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
-    marginTop: 8,
+    marginTop: 6,
   },
   rewardText: {
     color: COLORS.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 22,
   },
-  rewardHint: {
+  applyQuestion: {
     color: COLORS.textDim,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  toastCompactWrap: {
+    position: 'absolute',
+    left: -48,
+    right: -48,
+    bottom: '100%',
+    marginBottom: -10,
+    alignItems: 'center',
+  },
+  toastCompact: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#FFC23D',
+    borderWidth: 1.5,
+    borderColor: '#FFE7A3',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  toastCompactText: {
+    color: '#3A2300',
+    fontSize: 12,
+    fontWeight: '800',
     textAlign: 'center',
-    marginTop: 6,
+  },
+  toastError: {
+    backgroundColor: '#A3274C',
+    borderColor: '#D9668A',
+  },
+  toastErrorText: {
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(60, 0, 20, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   toastText: {
     color: '#1B1F3B',
@@ -1026,15 +1263,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    width: 300,
-    borderRadius: 24,
-    padding: 24,
+    width: 276,
+    borderRadius: 22,
+    padding: 20,
     alignItems: 'center',
   },
   cardTitle: { color: COLORS.textDim, fontSize: 18, fontWeight: '700' },
   cardScore: {
     color: COLORS.text,
-    fontSize: 52,
+    fontSize: 44,
     fontWeight: '900',
     marginTop: 8,
     fontVariant: ['tabular-nums'],
@@ -1045,25 +1282,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 4,
   },
+  buttonRow: { flexDirection: 'row', alignSelf: 'stretch', gap: 10, marginTop: 20 },
   primaryButton: {
-    marginTop: 24,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 999,
-    paddingVertical: 14,
+    paddingVertical: 9,
     backgroundColor: '#3DCB4A',
     alignItems: 'center',
   },
   reviewCard: { backgroundColor: '#262D57' },
   reviewStars: { flexDirection: 'row', gap: 6 },
   reviewStar: { width: 30, height: 30 },
-  reviewTitle: { color: COLORS.text, fontSize: 22, fontWeight: '900', marginTop: 14 },
-  primaryText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+  reviewTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 14,
+  },
+  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   secondaryButton: {
-    marginTop: 10,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 9,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
     alignItems: 'center',
   },
-  secondaryText: { color: COLORS.textDim, fontSize: 16, fontWeight: '700' },
+  secondaryText: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
 });

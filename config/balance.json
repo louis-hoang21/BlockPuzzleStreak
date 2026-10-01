@@ -6,26 +6,27 @@
   "perfectClearBonus": 1500,
   "maxRotations": 10,
   "fairnessRetries": 20,
-  "pieceColors": 7,
+  "pieceColors": 13,
   "difficulty": {
-    "scale": 8000,
-    "grace": 2000,
+    "scale": 13500,
+    "grace": 5000,
+    "capScore": 50000,
     "easy": {
       "basic": 3,
-      "small": 0.6,
+      "small": 1,
       "medium": 3.5,
       "large": 1,
       "long": 0.45
     },
     "hard": {
       "basic": 0.9,
-      "small": 0,
+      "small": 0.25,
       "medium": 1.5,
       "large": 8.5,
       "long": 0.33
     }
   },
-  "startingRotations": 3,
+  "startingRotations": 0,
   "prefill": {
     "minBest": 20000,
     "chance": 0.7,
@@ -69,9 +70,9 @@
   },
   "toughSet": {
     "minScore": 8000,
-    "chance": 0.02,
+    "chance": 0.01,
     "rampFrom": 10000,
-    "rampChance": 0.03,
+    "rampChance": 0.01,
     "rampEvery": 5000,
     "rampAdd": 0.005,
     "maxChance": 0.1,

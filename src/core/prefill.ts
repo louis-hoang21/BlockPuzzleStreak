@@ -67,7 +67,7 @@ export function prefilledBoard(rng: Rng, t: number): Board {
     const cells = rotateTimes(def.cells, Math.floor(rng() * 4));
     const row = Math.floor(rng() * n);
     const col = Math.floor(rng() * n);
-    if (canPlace(board, cells, row, col)) board = place(board, cells, row, col, def.color);
+    if (canPlace(board, cells, row, col)) board = place(board, cells, row, col, color());
   }
 
   const { rows, cols } = findFullLines(board);

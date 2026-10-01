@@ -8,6 +8,7 @@ export interface PlacementScore {
   linePoints: number;
   perfectClearPoints: number;
   total: number;
+  banked: number;
 }
 
 export function scorePlacement(
@@ -15,8 +16,10 @@ export function scorePlacement(
   linesCleared: number,
   prevCombo: number,
   perfectClear: boolean,
+  prevBanked = 0,
 ): PlacementScore {
-  const cellPoints = cellsPlaced * balance.pointsPerCell;
+  const earned = prevBanked + cellsPlaced * balance.pointsPerCell;
+  const cellPoints = linesCleared > 0 ? earned : 0;
   const combo = linesCleared > 0 ? prevCombo + 1 : 0;
   const multiplier = Math.max(1, combo);
   const linePoints = balance.lineClearBase * linesCleared * linesCleared * multiplier;
@@ -29,5 +32,6 @@ export function scorePlacement(
     linePoints,
     perfectClearPoints,
     total: cellPoints + linePoints + perfectClearPoints,
+    banked: linesCleared > 0 ? 0 : earned,
   };
 }

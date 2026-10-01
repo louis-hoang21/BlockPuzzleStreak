@@ -44,6 +44,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import {
   COMBO_SFX_DELAY_MS,
   ComboBanner,
+  ApplyPrompt,
   GameOverOverlay,
   LinesBanner,
   PopBanner,
@@ -222,7 +223,7 @@ export function ClassicScreen() {
 
   const rewardProgress = useCallback((prev: ClassicState, next: ClassicState, events: ClassicEvent[]) => {
     const progress = useProgressStore.getState();
-    if (next.score > prev.score) progress.onScore(prev.score, next.score, false);
+    if (next.score > prev.score) progress.onScore(prev.score, next.score);
     for (const e of events) {
       if (e.type !== 'clear') continue;
       if (e.perfect) progress.onPerfectClear();
@@ -254,7 +255,7 @@ export function ClassicScreen() {
     [handleEvents, rewardProgress],
   );
 
-  const running = phase === 'running' && !view.over;
+  const running = phase === 'running' && !view.over && !notice?.apply;
 
   useEffect(() => {
     if (!running) return;
@@ -443,25 +444,31 @@ export function ClassicScreen() {
           </GestureDetector>
         )}
         {layout && fireworks !== null && <Fireworks id={fireworks} width={layout.width} height={layout.height} />}
-        {layout && popup && <ScorePopup key={popup.id} popup={popup} top={centerY - 40} />}
-        {notice && !notice.reward && <Toast key={notice.id} text={notice.text} />}
-        {layout && notice?.reward && (
+        {layout && popup && <ScorePopup key={`score-${popup.id}`} popup={popup} top={centerY - 40} />}
+        {notice && !notice.reward && <Toast key={`toast-${notice.id}`} text={notice.text} />}
+        {layout && notice?.reward && !notice.apply && (
           <RewardPopup
-            key={notice.id}
+            key={`reward-${notice.id}`}
             kind={notice.reward}
             text={notice.text}
             top={layout.boardY + layout.boardH * 0.12}
             onShow={() => setFireworks(++eventId.current)}
           />
         )}
-        {layout && recordEvent !== null && <RecordBanner key={recordEvent} top={Math.max(0, centerY - 200)} />}
+        {layout && recordEvent !== null && (
+          <RecordBanner key={`record-${recordEvent}`} top={Math.max(0, centerY - 200)} />
+        )}
         {layout && levelEvent && (
-          <PopBanner key={levelEvent.id} top={Math.max(0, centerY - 260)}>
+          <PopBanner key={`level-${levelEvent.id}`} top={Math.max(0, centerY - 260)}>
             <Text style={styles.levelText}>Cấp {levelEvent.level}!</Text>
           </PopBanner>
         )}
-        {layout && multiLines && <LinesBanner key={multiLines.id} lines={multiLines.lines} top={centerY + 20} />}
-        {layout && comboEvent && <ComboBanner key={comboEvent.id} combo={comboEvent.combo} top={centerY - 130} />}
+        {layout && multiLines && (
+          <LinesBanner key={`lines-${multiLines.id}`} lines={multiLines.lines} top={centerY + 20} />
+        )}
+        {layout && comboEvent && (
+          <ComboBanner key={`combo-${comboEvent.id}`} combo={comboEvent.combo} top={centerY - 130} />
+        )}
       </View>
 
       {showButtons && (
@@ -489,12 +496,14 @@ export function ClassicScreen() {
                 <HelpRow icon="arrow.down.to.line" text="Vuốt mạnh xuống: thả thẳng" />
                 <HelpRow icon="arrow.up" text="Vuốt lên: giữ khối" />
               </View>
-              <Pressable style={styles.primaryButton} onPress={startCountdown}>
-                <Text style={styles.primaryText}>{phase === 'paused' ? 'Tiếp tục' : 'Bắt đầu'}</Text>
-              </Pressable>
-              <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-                <Text style={styles.secondaryText}>Về menu</Text>
-              </Pressable>
+              <View style={styles.buttonRow}>
+                <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
+                  <Text style={styles.secondaryText}>Về menu</Text>
+                </Pressable>
+                <Pressable style={styles.primaryButton} onPress={startCountdown}>
+                  <Text style={styles.primaryText}>{phase === 'paused' ? 'Tiếp tục' : 'Bắt đầu'}</Text>
+                </Pressable>
+              </View>
             </View>
           )}
         </View>
@@ -517,6 +526,8 @@ export function ClassicScreen() {
           onRestart={restart}
         />
       )}
+
+      {notice?.apply && <ApplyPrompt key={notice.id} notice={notice} />}
     </View>
   );
 }
@@ -730,27 +741,28 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 8,
   },
-  card: { width: 300, borderRadius: 24, padding: 24, alignItems: 'center', backgroundColor: '#262D57' },
-  cardTitle: { color: COLORS.text, fontSize: 24, fontWeight: '900' },
+  card: { width: 276, borderRadius: 22, padding: 20, alignItems: 'center', backgroundColor: '#262D57' },
+  cardTitle: { color: COLORS.text, fontSize: 22, fontWeight: '900' },
   help: { alignSelf: 'stretch', marginTop: 16, gap: 10 },
   helpRow: { flexDirection: 'row', alignItems: 'center' },
   helpIcon: { width: 22, height: 22, marginRight: 10 },
   helpText: { color: COLORS.text, fontSize: 15, fontWeight: '600' },
+  buttonRow: { flexDirection: 'row', alignSelf: 'stretch', gap: 10, marginTop: 20 },
   primaryButton: {
-    marginTop: 22,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 999,
-    paddingVertical: 14,
+    paddingVertical: 9,
     backgroundColor: '#3DCB4A',
     alignItems: 'center',
   },
-  primaryText: { color: '#FFFFFF', fontSize: 18, fontWeight: '800' },
+  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
   secondaryButton: {
-    marginTop: 10,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: 999,
-    paddingVertical: 12,
+    paddingVertical: 9,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
     alignItems: 'center',
   },
-  secondaryText: { color: COLORS.textDim, fontSize: 16, fontWeight: '700' },
+  secondaryText: { color: COLORS.text, fontSize: 14, fontWeight: '700' },
 });

@@ -48,11 +48,11 @@ interface Props {
   skin: Skin;
 }
 
-export const CLEAR_MS = 350;
+export const CLEAR_MS = 240;
 
 const SWEEP_START_S = 0.03;
 const SWEEP_S = CLEAR_MS / 1000 - SWEEP_START_S - 0.05;
-const SPARK_LIFE_S = 0.25;
+const SPARK_LIFE_S = 0.18;
 const SPARKS_PER_CELL = 3;
 
 interface Spark {
@@ -73,6 +73,9 @@ function clearOpacityValue(p: number): number {
   return p < 0.35 ? 1 : 1 - (p - 0.35) / 0.65;
 }
 const FLASH_COLOR = '#FFE680';
+const GHOST_INSET = 3;
+const GHOST_FILL = 0.1;
+const GHOST_STROKE = 0.55;
 
 function MiniPiece({
   shape,
@@ -132,12 +135,7 @@ function ClassicBurst({
   useEffect(() => {
     clearProgress.value = withTiming(1, { duration: CLEAR_MS, easing: Easing.linear });
     if (clearing.lines >= 2) {
-      frameFlash.value = withSequence(
-        withTiming(1, { duration: 70 }),
-        withTiming(0.25, { duration: 140 }),
-        withTiming(1, { duration: 70 }),
-        withTiming(0, { duration: 380 }),
-      );
+      frameFlash.value = withSequence(withTiming(1, { duration: 50 }), withTiming(0, { duration: 180 }));
     }
   }, [clearing, clearProgress, frameFlash]);
   const sparks = useMemo(() => {
@@ -256,6 +254,7 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
   const activeCells = active ? pieceCells(active) : [];
   const ghostCells = active ? pieceCells({ ...active, row: ghost }) : [];
   const color = active ? shapeColor(active.shape) : 0;
+  const ghostColor = skin.colors[color % skin.colors.length].base;
 
   const previewRows = useMemo(() => {
     if (!active) return [];
@@ -317,15 +316,28 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
       {grid}
       <Group clip={rect(boardX, boardY, boardW, boardH)}>
         {ghostCells.map(([r, c]) => (
-          <Block
-            key={`g${r}-${c}`}
-            x={boardX + c * cell}
-            y={yOf(r)}
-            size={cell}
-            color={color}
-            skin={skin}
-            opacity={0.28}
-          />
+          <Group key={`g${r}-${c}`}>
+            <RoundedRect
+              x={boardX + c * cell + GHOST_INSET}
+              y={yOf(r) + GHOST_INSET}
+              width={cell - GHOST_INSET * 2}
+              height={cell - GHOST_INSET * 2}
+              r={cell * 0.16}
+              color={ghostColor}
+              opacity={GHOST_FILL}
+            />
+            <RoundedRect
+              x={boardX + c * cell + GHOST_INSET}
+              y={yOf(r) + GHOST_INSET}
+              width={cell - GHOST_INSET * 2}
+              height={cell - GHOST_INSET * 2}
+              r={cell * 0.16}
+              color={ghostColor}
+              opacity={GHOST_STROKE}
+              style="stroke"
+              strokeWidth={2}
+            />
+          </Group>
         ))}
         {activeCells.map(([r, c]) => (
           <Block key={`a${r}-${c}`} x={boardX + c * cell} y={yOf(r)} size={cell} color={color} skin={skin} />

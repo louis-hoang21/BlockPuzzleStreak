@@ -11,7 +11,8 @@ export interface Piece {
 }
 
 function difficultyAt(score: number): number {
-  return 1 - Math.exp(-Math.max(0, score - balance.difficulty.grace) / balance.difficulty.scale);
+  const { grace, scale, capScore } = balance.difficulty;
+  return 1 - Math.exp(-Math.max(0, Math.min(score, capScore) - grace) / scale);
 }
 
 function tierWeight(tier: Tier, t: number): number {
@@ -36,7 +37,7 @@ export function randomPiece(rng: Rng, score: number): Piece {
     }
   }
   const turns = Math.floor(rng() * 4);
-  return { shapeId: def.id, color: def.color, cells: rotateTimes(def.cells, turns) };
+  return { shapeId: def.id, color: 0, cells: rotateTimes(def.cells, turns) };
 }
 
 function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
@@ -97,10 +98,24 @@ function toughSet(rng: Rng, board: Board, score: number): Piece[] | null {
   return best;
 }
 
-const DOT: Piece = { shapeId: SHAPES[0].id, color: SHAPES[0].color, cells: SHAPES[0].cells };
+const DOT: Piece = { shapeId: SHAPES[0].id, color: 0, cells: SHAPES[0].cells };
 const SMALL_SUBS = ['bar2', 'corner2', 'diag2'].map(shapeById);
 
-export function nextPieceSet(rng: Rng, board: Board, score: number): Piece[] {
+function paintSet(rng: Rng, set: readonly Piece[], avoid: readonly number[]): Piece[] {
+  const used = new Set(avoid);
+  return set.map((piece) => {
+    const free = Array.from({ length: balance.pieceColors }, (_, c) => c).filter((c) => !used.has(c));
+    const color = free[Math.floor(rng() * free.length)];
+    used.add(color);
+    return { ...piece, color };
+  });
+}
+
+export function nextPieceSet(rng: Rng, board: Board, score: number, avoid: readonly number[] = []): Piece[] {
+  return paintSet(rng, pickSet(rng, board, score), avoid);
+}
+
+function pickSet(rng: Rng, board: Board, score: number): Piece[] {
   const toughChance = toughSetChance(score);
   if (toughChance > 0 && rng() < toughChance) {
     const tough = toughSet(rng, board, score);
@@ -115,7 +130,7 @@ export function nextPieceSet(rng: Rng, board: Board, score: number): Piece[] {
   for (const { i } of bySize) {
     const subs = SMALL_SUBS.map((def) => ({ def, key: rng() })).sort((a, b) => a.key - b.key);
     for (const { def } of subs) {
-      set[i] = { shapeId: def.id, color: def.color, cells: rotateTimes(def.cells, Math.floor(rng() * 4)) };
+      set[i] = { shapeId: def.id, color: 0, cells: rotateTimes(def.cells, Math.floor(rng() * 4)) };
       if (canPlaceAll(board, set)) return set;
     }
     set[i] = DOT;

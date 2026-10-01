@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
-import { hasMove, newGame, placePiece, rotatePiece, type GameState, type PlaceResult } from '../core/game';
+import milestones from '../../config/milestones.json';
+import { addRotations, isOver, newGame, placePiece, rotatePiece, type GameState, type PlaceResult } from '../core/game';
+import { rotationMilestonesCrossed } from '../core/milestones';
 import type { BoardMode as Mode } from '../core/modes';
 import { prefillDifficulty, prefilledBoard, shouldPrefill } from '../core/prefill';
 import { createRng } from '../core/rng';
@@ -22,6 +24,7 @@ interface GameStore {
   resume: (mode: Mode) => void;
   place: (mode: Mode, slot: number, row: number, col: number) => PlaceResult | null;
   rotate: (mode: Mode, slot: number) => boolean;
+  giveUp: (mode: Mode) => void;
 }
 
 function randomSeed(): number {
@@ -30,14 +33,13 @@ function randomSeed(): number {
 
 function fresh(mode: Mode): ModeState {
   const seed = randomSeed();
-  const rotations = useProgressStore.getState().rotations;
   const best = useRecordsStore.getState().byMode[mode].bestScore;
   const rng = createRng(seed ^ 0x9e3779b9).next;
   if (shouldPrefill(best, rng)) {
     useNoticeStore.getState().push('Màn giải đố! Ghép khéo vào chỗ trống để nổ hàng');
-    return { game: newGame(seed, rotations, prefilledBoard(rng, prefillDifficulty(rng, best))), result: null };
+    return { game: newGame(seed, prefilledBoard(rng, prefillDifficulty(rng, best))), result: null };
   }
-  return { game: newGame(seed, rotations), result: null };
+  return { game: newGame(seed), result: null };
 }
 
 function restore(mode: Mode): ModeState {
@@ -46,10 +48,20 @@ function restore(mode: Mode): ModeState {
 }
 
 export const useGameStore = create<GameStore>()((set, get) => {
-  const current = (mode: Mode): GameState => ({
-    ...get().modes[mode].game,
-    rotations: useProgressStore.getState().rotations,
-  });
+  const current = (mode: Mode): GameState => get().modes[mode].game;
+
+  const withMilestones = (prev: GameState, next: GameState): GameState => {
+    let rotations = next.rotations;
+    for (const score of rotationMilestonesCrossed(prev.score, next.score)) {
+      const granted = addRotations(rotations, milestones.rotationMilestones.rotations);
+      rotations = granted.rotations;
+      if (granted.added > 0) useNoticeStore.getState().push(`Mốc ${score.toLocaleString()} điểm! +${granted.added} lượt xoay`, 'rotation');
+      else useNoticeStore.getState().push(`Mốc ${score.toLocaleString()} điểm! Kho xoay đã đầy`);
+    }
+    if (rotations === next.rotations) return next;
+    const game = { ...next, rotations };
+    return { ...game, over: isOver(game) };
+  };
 
   const commit = (mode: Mode, prev: GameState, next: GameState) => {
     const state = get().modes[mode];
@@ -58,7 +70,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
     if (next.stats.perfectClears > prev.stats.perfectClears) progress.onPerfectClear();
     if (next.combo > prev.combo) progress.onCombo(next.combo);
 
-    const game = next;
+    const game = withMilestones(prev, next);
     let result = state.result;
     if (game.over && !result) result = useRecordsStore.getState().submit(mode, game.score, game.stats.linesCleared);
     saveCurrentGame(mode, game);
@@ -78,7 +90,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
         get().start(mode);
         return;
       }
-      if (!hasMove(game.board, game.tray)) commit(mode, game, { ...game, over: true });
+      if (isOver(game)) commit(mode, game, { ...game, over: true });
     },
     place: (mode, slot, row, col) => {
       const prev = current(mode);
@@ -90,9 +102,12 @@ export const useGameStore = create<GameStore>()((set, get) => {
       const prev = current(mode);
       const game = rotatePiece(prev, slot);
       if (!game) return false;
-      useProgressStore.getState().setRotations(game.rotations);
       commit(mode, prev, game);
       return true;
+    },
+    giveUp: (mode) => {
+      const game = current(mode);
+      if (!game.over) commit(mode, game, { ...game, over: true });
     },
   };
 });
