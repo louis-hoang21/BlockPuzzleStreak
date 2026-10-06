@@ -33,13 +33,15 @@ function shapeScale(id: string, score: number): number {
   return scale[scale.length - 1];
 }
 
-export function randomPiece(rng: Rng, score: number): Piece {
+function shapeWeights(score: number): number[] {
   const t = difficultyAt(score);
   const tierTotals: Record<Tier, number> = { basic: 0, small: 0, medium: 0, large: 0, long: 0 };
   for (const s of SHAPES) tierTotals[s.tier] += s.weight ?? 1;
-  const weights = SHAPES.map(
-    (s) => ((tierWeight(s.tier, t) * (s.weight ?? 1)) / tierTotals[s.tier]) * shapeScale(s.id, score),
-  );
+  return SHAPES.map((s) => ((tierWeight(s.tier, t) * (s.weight ?? 1)) / tierTotals[s.tier]) * shapeScale(s.id, score));
+}
+
+export function randomPiece(rng: Rng, score: number): Piece {
+  const weights = shapeWeights(score);
   const total = weights.reduce((a, b) => a + b, 0);
 
   let roll = rng() * total;
@@ -130,16 +132,22 @@ const CHAIN_BRANCH = 8;
 const CHAIN_ATTEMPTS = 24;
 const CHAIN_LOOKAHEAD = 2;
 
-const CHAIN_SHAPES: { id: string; cells: Shape; weight: number }[] = SHAPES.flatMap((def) => {
+const CHAIN_WEIGHTS = shapeWeights(0);
+
+const CHAIN_SHAPES: { id: string; cells: Shape; weight: number }[] = SHAPES.flatMap((def, i) => {
   const out: { id: string; cells: Shape; weight: number }[] = [];
   for (let turn = 0; turn < 4; turn++) {
     const cells = rotateTimes(def.cells, turn);
-    if (!out.some((o) => sameShape(o.cells, cells))) {
-      out.push({ id: def.id, cells, weight: (def.weight ?? 1) * shapeScale(def.id, 0) * (1 + cells.length / 8) });
-    }
+    if (!out.some((o) => sameShape(o.cells, cells))) out.push({ id: def.id, cells, weight: 0 });
   }
-  return out;
+  return out.map((o) => ({ ...o, weight: (CHAIN_WEIGHTS[i] / out.length) * (1 + o.cells.length / 8) }));
 });
+
+const CHAIN_KEEP: Record<string, number | undefined> = balance.chainShapeKeep;
+
+function keepChain(rng: Rng, plan: readonly number[]): boolean {
+  return plan.every((k) => rng() < (CHAIN_KEEP[CHAIN_SHAPES[k].id] ?? 1));
+}
 
 type Bits = { lo: number; hi: number };
 
@@ -241,12 +249,13 @@ export function chainSet(rng: Rng, board: Board, sets: number, avoid: readonly n
   let set: number[] | null = null;
   for (let attempt = 0; attempt < (after > 0 ? CHAIN_ATTEMPTS : 1); attempt++) {
     const plan = search(start.lo, start.hi, balance.traySize + after, attempt < CHAIN_ATTEMPTS / 2);
-    if (!plan) continue;
+    if (!plan || !keepChain(rng, plan.slice(0, balance.traySize))) continue;
     set = plan.slice(0, balance.traySize);
     if (after === 0 || everyPathChains(start.lo, start.hi, set, after)) break;
   }
   for (let attempt = 0; !set && attempt < CHAIN_ATTEMPTS; attempt++) {
-    set = search(start.lo, start.hi, balance.traySize, attempt % 2 === 0);
+    const plan = search(start.lo, start.hi, balance.traySize, attempt % 2 === 0);
+    if (plan && keepChain(rng, plan)) set = plan;
   }
   if (!set) return null;
   const shuffled = set.map((k) => ({ k, key: rng() })).sort((x, y) => x.key - y.key);
