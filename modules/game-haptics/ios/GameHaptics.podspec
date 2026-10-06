@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary        = 'Core Haptics patterns for game feedback'
   s.description    = 'Core Haptics patterns for game feedback'
   s.license        = 'MIT'
-  s.author         = 'Block Puzzle Streak'
+  s.author         = 'Toast Twister'
   s.homepage       = 'https://github.com/louis-hoang21/BlockPuzzleStreak'
   s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.9'

@@ -1,8 +1,16 @@
 {
   "expo": {
     "name": "Toast Twister",
-    "slug": "block-puzzle-streak",
-    "scheme": "blockpuzzlestreak",
+    "slug": "toast-twister",
+    "scheme": "toasttwister",
+    "locales": {
+      "vi": {
+        "CFBundleDisplayName": "Toast Twister"
+      },
+      "en": {
+        "CFBundleDisplayName": "Toast Twister"
+      }
+    },
     "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -70,6 +78,17 @@
       [
         "expo-notifications",
         {}
+      ],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "vi",
+              "en"
+            ]
+          }
+        }
       ]
     ],
     "experiments": {

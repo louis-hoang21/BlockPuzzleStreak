@@ -1,3 +1,4 @@
+import { getLocales } from 'expo-localization';
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
@@ -12,12 +13,20 @@ export const LANGS: readonly { id: Lang; name: string }[] = [
 
 const ITEM = 'device-language';
 
-function loadLang(): Lang {
+function deviceLang(): Lang {
   try {
-    return keychainBackend.get(ITEM) === 'vi' ? 'vi' : 'en';
+    return getLocales()[0]?.languageCode === 'vi' ? 'vi' : 'en';
   } catch {
     return 'en';
   }
+}
+
+function loadLang(): Lang {
+  try {
+    const saved = keychainBackend.get(ITEM);
+    if (saved === 'en' || saved === 'vi') return saved;
+  } catch {}
+  return deviceLang();
 }
 
 interface LangStore {

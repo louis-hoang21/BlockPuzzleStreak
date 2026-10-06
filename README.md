@@ -1,4 +1,4 @@
-# Block Puzzle Streak
+# Toast Twister
 
 Offline block puzzle game for iPhone, built with Expo. Game rules and scope: see `PLAN.md`.
 
@@ -21,7 +21,7 @@ cp .env.example .env
 
 | Variable | Used for | When empty |
 |---|---|---|
-| `IOS_BUNDLE_ID` | iOS bundle identifier | `com.example.blockpuzzlestreak` |
+| `IOS_BUNDLE_ID` | iOS bundle identifier | `com.example.toasttwister` |
 | `APPLE_TEAM_ID` | Signing team written into the Xcode project by `npx expo prebuild` | Pick the team in Xcode |
 | `APP_STORE_URL` | "Rate" button opens the App Store review page (`https://apps.apple.com/app/id<Apple ID>`) | Falls back to Apple's in-app rating sheet |
 
