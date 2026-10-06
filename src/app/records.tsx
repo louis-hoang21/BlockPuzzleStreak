@@ -6,12 +6,14 @@ import milestones from '../../config/milestones.json';
 import { SCORE_UNLOCKS } from '../core/milestones';
 import { MODES, type Mode } from '../core/modes';
 import { hapticTap } from '../haptics';
+import { useT } from '../i18n';
 import { COLORS, skinName, themeName } from '../render/theme';
 import { useRecordsStore } from '../store/recordsStore';
 import { ScreenHeader } from '../ui/ScreenHeader';
 
 export default function RecordsScreen() {
   const insets = useSafeAreaInsets();
+  const tr = useT();
   const [mode, setMode] = useState<Mode>(MODES[0].id);
   const { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest, bestLevel } = useRecordsStore(
     (s) => s.byMode[mode],
@@ -19,7 +21,7 @@ export default function RecordsScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Kỷ lục" />
+      <ScreenHeader title={tr('Records', 'Kỷ lục')} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }}>
         {MODES.length > 1 && (
           <View style={styles.tabs}>
@@ -33,13 +35,13 @@ export default function RecordsScreen() {
                 accessibilityRole="tab"
                 accessibilityState={{ selected: m.id === mode }}
                 style={[styles.tab, m.id === mode && styles.tabActive]}>
-                <Text style={[styles.tabText, m.id === mode && styles.tabTextActive]}>{m.name}</Text>
+                <Text style={[styles.tabText, m.id === mode && styles.tabTextActive]}>{tr(m.name)}</Text>
               </Pressable>
             ))}
           </View>
         )}
         <View style={styles.bestCard}>
-          <Text style={styles.bestLabel}>Điểm cao nhất</Text>
+          <Text style={styles.bestLabel}>{tr('Best score', 'Điểm cao nhất')}</Text>
           <Text style={styles.bestValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {bestScore.toLocaleString()}
           </Text>
@@ -47,35 +49,35 @@ export default function RecordsScreen() {
         <View style={styles.totals}>
           <View style={styles.total}>
             <Text style={styles.totalValue}>{gamesPlayed.toLocaleString()}</Text>
-            <Text style={styles.totalLabel}>Ván đã chơi</Text>
+            <Text style={styles.totalLabel}>{tr('Games played', 'Ván đã chơi')}</Text>
           </View>
           <View style={styles.total}>
             <Text style={styles.totalValue}>{gamesBelowBest.toLocaleString()}</Text>
-            <Text style={styles.totalLabel}>Ván thua kỷ lục</Text>
+            <Text style={styles.totalLabel}>{tr('Below best', 'Ván thua kỷ lục')}</Text>
           </View>
           <View style={styles.total}>
             <Text style={styles.totalValue}>{totalLinesCleared.toLocaleString()}</Text>
-            <Text style={styles.totalLabel}>{mode === 'classic' ? 'Tổng hàng' : 'Tổng hàng nổ'}</Text>
+            <Text style={styles.totalLabel}>{mode === 'classic' ? tr('Total lines', 'Tổng hàng') : tr('Lines cleared', 'Tổng hàng nổ')}</Text>
           </View>
           {mode === 'classic' && (
             <View style={styles.total}>
               <Text style={styles.totalValue}>{bestLevel.toLocaleString()}</Text>
-              <Text style={styles.totalLabel}>Cấp cao nhất</Text>
+              <Text style={styles.totalLabel}>{tr('Best level', 'Cấp cao nhất')}</Text>
             </View>
           )}
         </View>
         {mode === 'jackpot' && (
           <>
-            <Text style={styles.section}>Mốc điểm trong một ván</Text>
+            <Text style={styles.section}>{tr('Score milestones in one game', 'Mốc điểm trong một ván')}</Text>
             <View style={styles.milestones}>
               {[...new Set([...milestones.rotationMilestones.scores, ...SCORE_UNLOCKS.map((u) => u.score)])]
                 .sort((a, b) => a - b)
                 .map((score) => {
                   const reached = bestScore >= score;
                   const rewards = [
-                    ...(milestones.rotationMilestones.scores.includes(score) ? ['+1 xoay mỗi ván'] : []),
+                    ...(milestones.rotationMilestones.scores.includes(score) ? [tr('+1 rotation per game', '+1 xoay mỗi ván')] : []),
                     ...SCORE_UNLOCKS.filter((u) => u.score === score).map((u) =>
-                      u.kind === 'theme' ? `Theme ${themeName(u.id)}` : `Skin ${skinName(u.id)}`,
+                      u.kind === 'theme' ? `Theme ${tr(themeName(u.id))}` : `Skin ${tr(skinName(u.id))}`,
                     ),
                   ];
                   return (

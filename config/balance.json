@@ -2,51 +2,98 @@
   "gridSize": 8,
   "traySize": 3,
   "pointsPerCell": 5,
-  "lineClearBase": 150,
+  "linePoints": [0, 300, 1000, 2000, 3000],
+  "linePointsExtra": 1000,
   "perfectClearBonus": 1500,
   "maxRotations": 10,
   "fairnessRetries": 20,
   "pieceColors": 13,
   "difficulty": {
-    "scale": 13500,
+    "scale": 19300,
     "grace": 5000,
     "capScore": 50000,
     "easy": {
-      "basic": 3,
+      "basic": 2.75,
       "small": 1,
-      "medium": 3.5,
-      "large": 1,
-      "long": 0.45
+      "medium": 2.73,
+      "large": 0.78,
+      "long": 0.225
     },
     "hard": {
-      "basic": 0.9,
+      "basic": 0.82,
       "small": 0.25,
-      "medium": 1.5,
-      "large": 8.5,
-      "long": 0.33
+      "medium": 1.17,
+      "large": 6.64,
+      "long": 0.165
     }
   },
   "startingRotations": 0,
+  "shapeScale": {
+    "atScore": [0, 15000, 50000],
+    "shapes": {
+      "L": [0.176, 0.731, 1.354],
+      "J": [0.176, 0.731, 1.354],
+      "L4": [5.225, 0.488, 0.071],
+      "J4": [5.225, 0.488, 0.071],
+      "bar4": [0.96, 0.319, 0.231],
+      "bar5": [0.96, 0.348, 0.158],
+      "bar6": [0.96, 0.745, 0.475],
+      "square3": [0.96, 0.584, 0.409],
+      "corner3": [0.479, 0.088, 0.017],
+      "rect2x3": [0.972, 0.757, 0.41],
+      "diag2": [0.502, 0.401, 0.194],
+      "diag3": [0.267, 0.118, 0.116]
+    }
+  },
+  "chainSets": 2,
+  "tester": {
+    "rotations": 99,
+    "stormNeed": [2, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+    "prefillChance": 0.5,
+    "maxStorms": 10
+  },
+  "gift": {
+    "bonus": 1000,
+    "radius": 1
+  },
+  "heart": {
+    "multiplier": 4,
+    "minCells": 6
+  },
+  "storm": {
+    "energyPerLine": 1,
+    "energyPerCombo": 1,
+    "firstGameNeed": 4,
+    "needByScore": {
+      "atScore": [0, 15000, 25000, 35000],
+      "need": [12, 15, 18, 20]
+    },
+    "maxStorms": 5,
+    "wipeChance": {
+      "atScore": [0, 15000, 20000, 25000, 30000, 35000, 40000],
+      "chance": [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]
+    },
+    "shuffleAttempts": 20,
+    "chainPieces": 12,
+    "seedCells": 6,
+    "minCells": 24,
+    "maxCells": 40,
+    "attempts": 12,
+    "budget": 60,
+    "branch": 3,
+    "tolerance": 4
+  },
   "prefill": {
     "minBest": 20000,
     "chance": 0.7,
     "fillEasy": 0.2,
     "fillHard": 0.34,
-    "nearLinesEasy": 3,
-    "nearLinesHard": 1,
+    "nearLinesEasy": 6,
+    "nearLinesHard": 6,
     "tiers": {
-      "easy": [
-        0,
-        0.2
-      ],
-      "medium": [
-        0.2,
-        0.4
-      ],
-      "hard": [
-        0.4,
-        0.6
-      ]
+      "easy": [0, 0.2],
+      "medium": [0.2, 0.4],
+      "hard": [0.4, 0.6]
     },
     "tierWeightsAtMinBest": {
       "easy": 70,
@@ -70,12 +117,12 @@
   },
   "toughSet": {
     "minScore": 8000,
-    "chance": 0.01,
+    "chance": 0.007,
     "rampFrom": 10000,
-    "rampChance": 0.01,
+    "rampChance": 0.007,
     "rampEvery": 5000,
-    "rampAdd": 0.005,
-    "maxChance": 0.1,
+    "rampAdd": 0.0035,
+    "maxChance": 0.07,
     "candidates": 24
   }
 }

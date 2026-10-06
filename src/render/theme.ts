@@ -1,3 +1,5 @@
+import type { Localized } from '../i18n';
+
 export interface BlockColor {
   base: string;
   light: string;
@@ -26,20 +28,33 @@ export function hudColors(tone: 'dark' | 'light') {
 
 export interface BoardTheme {
   id: string;
-  name: string;
+  name: Localized;
   tone: 'dark' | 'light';
   background: string;
   boardFrame: string;
   boardBg: string;
   emptyCell: string;
-  emptyCellStyle: 'plain' | 'sunset';
-  backdrop?: 'night' | 'forest' | 'ocean' | 'space';
+  emptyCellStyle: 'plain' | 'sunset' | 'wood';
+  frameStyle?: 'wood';
+  backdrop?: 'night' | 'forest' | 'ocean' | 'space' | 'kitchen';
 }
 
 export const THEMES: readonly BoardTheme[] = [
   {
+    id: 'theme-6',
+    name: { en: 'Warm Kitchen', vi: 'Bếp ấm' },
+    tone: 'light',
+    background: '#E9CDA4',
+    boardFrame: '#A86A35',
+    boardBg: '#4E2F17',
+    emptyCell: '#6A4223',
+    emptyCellStyle: 'wood',
+    frameStyle: 'wood',
+    backdrop: 'kitchen',
+  },
+  {
     id: 'theme-1',
-    name: 'Đêm sao',
+    name: { en: 'Starry Night', vi: 'Đêm sao' },
     tone: 'dark',
     background: '#1B1F3B',
     boardFrame: '#6B4226',
@@ -50,7 +65,7 @@ export const THEMES: readonly BoardTheme[] = [
   },
   {
     id: 'theme-2',
-    name: 'Rừng xanh',
+    name: { en: 'Green Forest', vi: 'Rừng xanh' },
     tone: 'dark',
     background: '#12291E',
     boardFrame: '#5A3B1F',
@@ -61,7 +76,7 @@ export const THEMES: readonly BoardTheme[] = [
   },
   {
     id: 'theme-3',
-    name: 'Hoàng hôn',
+    name: { en: 'Sunset', vi: 'Hoàng hôn' },
     tone: 'dark',
     background: '#3A1C3F',
     boardFrame: '#9C4A2E',
@@ -71,7 +86,7 @@ export const THEMES: readonly BoardTheme[] = [
   },
   {
     id: 'theme-4',
-    name: 'Đại dương',
+    name: { en: 'Ocean', vi: 'Đại dương' },
     tone: 'dark',
     background: '#0E2A3D',
     boardFrame: '#C9A36A',
@@ -82,7 +97,7 @@ export const THEMES: readonly BoardTheme[] = [
   },
   {
     id: 'theme-5',
-    name: 'Vũ trụ',
+    name: { en: 'Outer Space', vi: 'Vũ trụ' },
     tone: 'dark',
     background: '#0E1633',
     boardFrame: '#5B3FA8',
@@ -97,7 +112,7 @@ export type BlockStyle = 'bevel' | 'flower' | 'neon' | 'candy' | 'gem' | 'wood' 
 
 export interface Skin {
   id: string;
-  name: string;
+  name: Localized;
   style: BlockStyle;
   colors: readonly BlockColor[];
 }
@@ -119,10 +134,30 @@ const CLASSIC: BlockColor[] = [
 ];
 
 export const SKINS: readonly Skin[] = [
-  { id: 'skin-1', name: 'Cổ điển', style: 'bevel', colors: CLASSIC },
+  {
+    id: 'skin-9',
+    name: { en: 'Toast', vi: 'Bánh mì nướng' },
+    style: 'toast',
+    colors: [
+      { base: '#3D6FD1', light: '#7FA2E6', dark: '#26499A' },
+      { base: '#D62F3C', light: '#EE7480', dark: '#961B26' },
+      { base: '#54A83E', light: '#8ACB78', dark: '#357026' },
+      { base: '#F5B800', light: '#FFD95C', dark: '#B08300' },
+      { base: '#F07A1A', light: '#F8AB6A', dark: '#B0520A' },
+      { base: '#7B3FB8', light: '#A97FDB', dark: '#4F2280' },
+      { base: '#1FA6B8', light: '#6CCFDB', dark: '#126F7D' },
+      { base: '#E8559A', light: '#F493C1', dark: '#A8336A' },
+      { base: '#2AAE7E', light: '#73D2AF', dark: '#187553' },
+      { base: '#4A4FC9', light: '#878BE3', dark: '#2D3190' },
+      { base: '#9DBF1F', light: '#C8E06A', dark: '#68800E' },
+      { base: '#C23AC9', light: '#DE80E3', dark: '#86208C' },
+      { base: '#6B3A1F', light: '#9C6845', dark: '#42200E' },
+    ],
+  },
+  { id: 'skin-1', name: { en: 'Classic', vi: 'Cổ điển' }, style: 'bevel', colors: CLASSIC },
   {
     id: 'skin-2',
-    name: 'Pastel',
+    name: { en: 'Pastel', vi: 'Pastel' },
     style: 'flower',
     colors: [
       { base: '#619BFF', light: '#96BDFF', dark: '#3C76DB' },
@@ -142,7 +177,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-3',
-    name: 'Neon',
+    name: { en: 'Neon', vi: 'Neon' },
     style: 'neon',
     colors: [
       { base: '#2D7DFF', light: '#7FB2FF', dark: '#1447B3' },
@@ -162,7 +197,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-4',
-    name: 'Viên thuốc',
+    name: { en: 'Capsule', vi: 'Viên thuốc' },
     style: 'candy',
     colors: [
       { base: '#FF5FA2', light: '#FFB3D4', dark: '#C23A77' },
@@ -182,7 +217,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-5',
-    name: 'Đá quý',
+    name: { en: 'Gems', vi: 'Đá quý' },
     style: 'gem',
     colors: [
       { base: '#1F5BFF', light: '#8FB0FF', dark: '#0E2F99' },
@@ -202,7 +237,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-6',
-    name: 'Gỗ',
+    name: { en: 'Wood', vi: 'Gỗ' },
     style: 'wood',
     colors: [
       { base: '#4F7FB8', light: '#7FA6D4', dark: '#2E5180' },
@@ -222,7 +257,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-7',
-    name: 'Gạch',
+    name: { en: 'Brick', vi: 'Gạch' },
     style: 'brick',
     colors: [
       { base: '#3F6FB0', light: '#7099D1', dark: '#24426E' },
@@ -242,7 +277,7 @@ export const SKINS: readonly Skin[] = [
   },
   {
     id: 'skin-8',
-    name: 'Sushi',
+    name: { en: 'Sushi', vi: 'Sushi' },
     style: 'sushi',
     colors: [
       { base: '#3B7BE0', light: '#7FAAF0', dark: '#2253A3' },
@@ -258,26 +293,6 @@ export const SKINS: readonly Skin[] = [
       { base: '#A8CC2E', light: '#CDE57A', dark: '#728C16' },
       { base: '#D14FD9', light: '#E58FEA', dark: '#932F99' },
       { base: '#B07A4A', light: '#D2A77E', dark: '#774E2A' },
-    ],
-  },
-  {
-    id: 'skin-9',
-    name: 'Bánh mì nướng',
-    style: 'toast',
-    colors: [
-      { base: '#3D6FD1', light: '#7FA2E6', dark: '#26499A' },
-      { base: '#D62F3C', light: '#EE7480', dark: '#961B26' },
-      { base: '#54A83E', light: '#8ACB78', dark: '#357026' },
-      { base: '#F5B800', light: '#FFD95C', dark: '#B08300' },
-      { base: '#F07A1A', light: '#F8AB6A', dark: '#B0520A' },
-      { base: '#7B3FB8', light: '#A97FDB', dark: '#4F2280' },
-      { base: '#1FA6B8', light: '#6CCFDB', dark: '#126F7D' },
-      { base: '#E8559A', light: '#F493C1', dark: '#A8336A' },
-      { base: '#2AAE7E', light: '#73D2AF', dark: '#187553' },
-      { base: '#4A4FC9', light: '#878BE3', dark: '#2D3190' },
-      { base: '#9DBF1F', light: '#C8E06A', dark: '#68800E' },
-      { base: '#C23AC9', light: '#DE80E3', dark: '#86208C' },
-      { base: '#6B3A1F', light: '#9C6845', dark: '#42200E' },
     ],
   },
 ];

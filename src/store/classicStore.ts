@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 
+import cfg from '../../config/classic.json';
 import { newClassic, type ClassicState } from '../core/classic/engine';
 import { loadClassicGame, saveClassicGame } from '../persistence/classicGame';
+import { isTester } from './progressStore';
 import { useRecordsStore, type GameResult } from './recordsStore';
 
 interface ClassicStore {
@@ -16,11 +18,17 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 0x100000000) >>> 0;
 }
 
+function freshClassic(): ClassicState {
+  return isTester()
+    ? newClassic(randomSeed(), cfg.gift.testerChance, cfg.bolt.testerChance)
+    : newClassic(randomSeed(), cfg.gift.chance, cfg.bolt.chance);
+}
+
 export const useClassicStore = create<ClassicStore>()((set, get) => ({
-  game: loadClassicGame() ?? newClassic(randomSeed()),
+  game: loadClassicGame() ?? freshClassic(),
   result: null,
   start: () => {
-    const game = newClassic(randomSeed());
+    const game = freshClassic();
     saveClassicGame(game);
     set({ game, result: null });
   },

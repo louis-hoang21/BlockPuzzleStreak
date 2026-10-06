@@ -42,5 +42,18 @@
     "softDrop": 1,
     "hardDrop": 2
   },
-  "colorStageLevels": 3
+  "colorStageLevels": 3,
+  "gift": {
+    "chance": 0.1,
+    "testerChance": 0.35,
+    "bonus": 500
+  },
+  "bolt": {
+    "chance": 0.05,
+    "testerChance": 0.2,
+    "peakSpeed": 1.3,
+    "rampInMs": 5000,
+    "rampOutMs": 4000,
+    "durationMs": 12000
+  }
 }

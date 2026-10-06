@@ -1,14 +1,26 @@
 import { create } from 'zustand';
 
+import balance from '../../config/balance.json';
 import milestones from '../../config/milestones.json';
-import { addRotations, isOver, newGame, placePiece, rotatePiece, type GameState, type PlaceResult } from '../core/game';
+import {
+  addRotations,
+  castStorm,
+  isOver,
+  newGame,
+  placePiece,
+  rotatePiece,
+  type GameState,
+  type PlaceResult,
+  type StormResult,
+} from '../core/game';
 import { rotationMilestonesCrossed } from '../core/milestones';
 import type { BoardMode as Mode } from '../core/modes';
 import { prefillDifficulty, prefilledBoard, shouldPrefill } from '../core/prefill';
 import { createRng } from '../core/rng';
+import { t } from '../i18n';
 import { loadCurrentGame, saveCurrentGame } from '../persistence/currentGame';
 import { useNoticeStore } from './noticeStore';
-import { useProgressStore } from './progressStore';
+import { isTester, useProgressStore } from './progressStore';
 import { useRecordsStore, type GameResult } from './recordsStore';
 
 export type { BoardMode as Mode } from '../core/modes';
@@ -24,6 +36,7 @@ interface GameStore {
   resume: (mode: Mode) => void;
   place: (mode: Mode, slot: number, row: number, col: number) => PlaceResult | null;
   rotate: (mode: Mode, slot: number) => boolean;
+  storm: (mode: Mode) => StormResult | null;
   giveUp: (mode: Mode) => void;
 }
 
@@ -33,13 +46,21 @@ function randomSeed(): number {
 
 function fresh(mode: Mode): ModeState {
   const seed = randomSeed();
-  const best = useRecordsStore.getState().byMode[mode].bestScore;
+  const { bestScore: best, gamesPlayed } = useRecordsStore.getState().byMode[mode];
+  const tester = isTester();
+  const firstGame = gamesPlayed === 0;
+  const stormNeed = tester ? balance.tester.stormNeed : firstGame ? [balance.storm.firstGameNeed] : [];
+  const stormMax = tester ? balance.tester.maxStorms : balance.storm.maxStorms + (firstGame ? 1 : 0);
+  const rotations = tester ? balance.tester.rotations : balance.startingRotations;
   const rng = createRng(seed ^ 0x9e3779b9).next;
-  if (shouldPrefill(best, rng)) {
-    useNoticeStore.getState().push('Màn giải đố! Ghép khéo vào chỗ trống để nổ hàng');
-    return { game: newGame(seed, prefilledBoard(rng, prefillDifficulty(rng, best))), result: null };
+  if (shouldPrefill(best, rng) || (tester && rng() < balance.tester.prefillChance)) {
+    useNoticeStore.getState().push(t('Puzzle board! Fit blocks into the gaps to clear lines', 'Màn giải đố! Ghép khéo vào chỗ trống để nổ hàng'));
+    return {
+      game: newGame(seed, prefilledBoard(rng, prefillDifficulty(rng, best)), balance.chainSets, stormNeed, rotations, stormMax),
+      result: null,
+    };
   }
-  return { game: newGame(seed), result: null };
+  return { game: newGame(seed, undefined, 0, stormNeed, rotations, stormMax), result: null };
 }
 
 function restore(mode: Mode): ModeState {
@@ -55,8 +76,11 @@ export const useGameStore = create<GameStore>()((set, get) => {
     for (const score of rotationMilestonesCrossed(prev.score, next.score)) {
       const granted = addRotations(rotations, milestones.rotationMilestones.rotations);
       rotations = granted.rotations;
-      if (granted.added > 0) useNoticeStore.getState().push(`Mốc ${score.toLocaleString()} điểm! +${granted.added} lượt xoay`, 'rotation');
-      else useNoticeStore.getState().push(`Mốc ${score.toLocaleString()} điểm! Kho xoay đã đầy`);
+      const notices = useNoticeStore.getState();
+      const points = score.toLocaleString();
+      if (granted.added > 0)
+        notices.push(t(`${points} points! +${granted.added} rotations`, `Mốc ${points} điểm! +${granted.added} lượt xoay`), 'rotation');
+      else notices.push(t(`${points} points! Rotations are full`, `Mốc ${points} điểm! Kho xoay đã đầy`));
     }
     if (rotations === next.rotations) return next;
     const game = { ...next, rotations };
@@ -104,6 +128,20 @@ export const useGameStore = create<GameStore>()((set, get) => {
       if (!game) return false;
       commit(mode, prev, game);
       return true;
+    },
+    storm: (mode) => {
+      const prev = current(mode);
+      const result = castStorm(prev);
+      if (!result) return null;
+      commit(mode, prev, result.state);
+      useNoticeStore
+        .getState()
+        .push(
+          result.wiped
+            ? t('Block Storm! The board is swept clean', 'Bão khối! Bàn được quét sạch')
+            : t('Block Storm! The board is reshuffled', 'Bão khối! Bàn được xáo lại'),
+        );
+      return result;
     },
     giveUp: (mode) => {
       const game = current(mode);

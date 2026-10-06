@@ -5,8 +5,9 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GIFT_CODES_ENABLED, isValidGiftCode } from '../core/giftCodes';
+import { GIFT_CODES_ENABLED, isTesterCode, isValidGiftCode } from '../core/giftCodes';
 import { hapticTap, hapticWarning } from '../haptics';
+import { LANGS, useLang, useLangStore, useT } from '../i18n';
 import { cancelReminders, ensurePermission, scheduleReminders } from '../notifications/reminder';
 import { COLORS } from '../render/theme';
 import { useProgressStore } from '../store/progressStore';
@@ -23,6 +24,34 @@ const REMINDER_TIMES = [
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+function LanguageRow() {
+  const lang = useLang();
+  return (
+    <View style={styles.langRow}>
+      <Text style={styles.label}>Language / Ngôn ngữ</Text>
+      <View style={styles.langOptions}>
+        {LANGS.map(({ id, name }) => {
+          const selected = id === lang;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => {
+                if (selected) return;
+                hapticTap();
+                useLangStore.getState().setLang(id);
+              }}
+              style={[styles.time, selected && styles.timeSelected]}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}>
+              <Text style={[styles.timeText, selected && styles.timeTextSelected]}>{name}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function Row({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <View style={styles.row}>
@@ -34,6 +63,7 @@ function Row({ label, value, onChange }: { label: string; value: boolean; onChan
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const tr = useT();
   const giftPass = useProgressStore((s) => s.giftRedeemed);
   const { sound, haptics, classicButtons, reminder, reminderHour, reminderMinute, update } = useSettingsStore();
   const [blocked, setBlocked] = useState(false);
@@ -64,7 +94,7 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title="Cài đặt"
+        title={tr('Settings', 'Cài đặt')}
         right={
           giftPass ? (
             <SymbolView
@@ -72,26 +102,30 @@ export default function SettingsScreen() {
               size={24}
               tintColor="#FFD84D"
               style={styles.crown}
-              accessibilityLabel="Đã kích hoạt mã quà tặng"
+              accessibilityLabel={tr('Gift code redeemed', 'Đã kích hoạt mã quà tặng')}
             />
           ) : null
         }
       />
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}>
         <View style={styles.card}>
-          <Row label="Âm thanh" value={sound} onChange={(v) => update({ sound: v })} />
+          <LanguageRow />
+        </View>
+
+        <View style={styles.card}>
+          <Row label={tr('Sound', 'Âm thanh')} value={sound} onChange={(v) => update({ sound: v })} />
           <View style={styles.divider} />
-          <Row label="Rung" value={haptics} onChange={(v) => update({ haptics: v })} />
+          <Row label={tr('Haptics', 'Rung')} value={haptics} onChange={(v) => update({ haptics: v })} />
           <View style={styles.divider} />
           <Row
-            label="Nút điều khiển (Cổ điển)"
+            label={tr('Control buttons (Classic)', 'Nút điều khiển (Cổ điển)')}
             value={classicButtons}
             onChange={(v) => update({ classicButtons: v })}
           />
         </View>
 
         <View style={styles.card}>
-          <Row label="Nhắc chơi mỗi ngày" value={reminder} onChange={toggleReminder} />
+          <Row label={tr('Daily reminder', 'Nhắc chơi mỗi ngày')} value={reminder} onChange={toggleReminder} />
           {reminder && (
             <View style={styles.times}>
               {REMINDER_TIMES.map(({ hour, minute }) => {
@@ -114,14 +148,22 @@ export default function SettingsScreen() {
           {blocked && (
             <View style={styles.blocked}>
               <Text style={styles.blockedText}>
-                Thông báo đang bị tắt cho app này. Bật lại trong Cài đặt của iPhone.
+                {tr(
+                  'Notifications are off for this app. Turn them on in iPhone Settings.',
+                  'Thông báo đang bị tắt cho app này. Bật lại trong Cài đặt của iPhone.',
+                )}
               </Text>
               <Pressable onPress={() => Linking.openSettings()} style={styles.link}>
-                <Text style={styles.linkText}>Mở Cài đặt</Text>
+                <Text style={styles.linkText}>{tr('Open Settings', 'Mở Cài đặt')}</Text>
               </Pressable>
             </View>
           )}
-          <Text style={styles.hint}>Chỉ nhắc vào những ngày bạn chưa mở game. Không gửi gì qua mạng.</Text>
+          <Text style={styles.hint}>
+            {tr(
+              "Only reminds you on days you haven't opened the game. Nothing is sent over the network.",
+              'Chỉ nhắc vào những ngày bạn chưa mở game. Không gửi gì qua mạng.',
+            )}
+          </Text>
         </View>
 
         <Pressable
@@ -131,28 +173,38 @@ export default function SettingsScreen() {
             update({ onboarded: false });
           }}>
           <View style={styles.row}>
-            <Text style={styles.label}>Xem lại hướng dẫn</Text>
-            <Text style={styles.hintInline}>Hiện ở ván tiếp theo</Text>
+            <Text style={styles.label}>{tr('Replay tutorial', 'Xem lại hướng dẫn')}</Text>
+            <Text style={styles.hintInline}>{tr('Shows next game', 'Hiện ở ván tiếp theo')}</Text>
           </View>
         </Pressable>
 
         {GIFT_CODES_ENABLED && <GiftCodeCard />}
 
-        <Text style={styles.version}>Phiên bản {Constants.expoConfig?.version ?? '–'}</Text>
+        <Text style={styles.version}>{tr('Version', 'Phiên bản')} {Constants.expoConfig?.version ?? '–'}</Text>
       </ScrollView>
     </View>
   );
 }
 
 function GiftCodeCard() {
+  const tr = useT();
   const [code, setCode] = useState('');
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const redeemed = useProgressStore((s) => s.giftRedeemed);
+  const testerRedeemed = useProgressStore((s) => s.testerRedeemed === true);
+  const tester = useProgressStore((s) => s.tester === true);
 
   const redeem = () => {
+    if (isTesterCode(code)) {
+      hapticTap();
+      useProgressStore.getState().enableTester();
+      setCode('');
+      setMessage({ ok: true, text: tr('Tester mode on. Applies from your next game.', 'Đã bật chế độ thử nghiệm. Áp dụng từ ván mới.') });
+      return;
+    }
     if (!isValidGiftCode(code)) {
       hapticWarning();
-      setMessage({ ok: false, text: 'Mã không đúng. Kiểm tra lại nhé.' });
+      setMessage({ ok: false, text: tr('Invalid code. Please check it again.', 'Mã không đúng. Kiểm tra lại nhé.') });
       return;
     }
     hapticTap();
@@ -160,22 +212,53 @@ function GiftCodeCard() {
     setCode('');
     setMessage({
       ok: true,
-      text: opened > 0 ? 'Bật tung nắp kho báu, chiến nào!!!' : 'Bạn đã có đủ theme và skin rồi.',
+      text:
+        opened > 0
+          ? tr("Treasure chest unlocked, let's go!!!", 'Bật tung nắp kho báu, chiến nào!!!')
+          : tr('You already have every theme and skin.', 'Bạn đã có đủ theme và skin rồi.'),
     });
   };
 
-  if (redeemed) {
+  if (testerRedeemed) {
+    return (
+      <View style={styles.card}>
+        <Row
+          label={tr('Tester mode', 'Chế độ thử nghiệm')}
+          value={tester}
+          onChange={(on) => {
+            hapticTap();
+            useProgressStore.getState().setTester(on);
+          }}
+        />
+        <Text style={styles.redeemedText}>
+          {tr(
+            '99 rotations, storms arrive very early, preset puzzles show up right away, Classic mode drops lots of gift blocks, all themes and skins unlocked. Applies from your next game.',
+            '99 lượt xoay, bão đến rất sớm, màn xếp sẵn xuất hiện ngay, chế độ Cổ điển ra nhiều khối quà, mở toàn bộ theme và skin. Áp dụng từ ván mới.',
+          )}
+        </Text>
+        {message?.ok && <Text style={[styles.codeMessage, { color: '#3DCB4A' }]}>{message.text}</Text>}
+        <View style={{ height: 12 }} />
+      </View>
+    );
+  }
+
+  if (redeemed && message?.ok) {
     return (
       <View style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.label}>Mã quà tặng</Text>
+          <Text style={styles.label}>{tr('Gift code', 'Mã quà tặng')}</Text>
           <View style={styles.redeemedRow}>
             <SymbolView name="crown.fill" size={16} tintColor="#FFD84D" style={styles.redeemedCrown} />
-            <Text style={styles.redeemedBadge}>Đã dùng</Text>
+            <Text style={styles.redeemedBadge}>{tr('Redeemed', 'Đã dùng')}</Text>
           </View>
         </View>
-        <Text style={styles.redeemedText}>Kho báu đã mở: toàn bộ theme và skin. Vào Bộ sưu tập để chọn nhé!</Text>
-        {message?.ok && <Text style={[styles.codeMessage, { color: '#3DCB4A' }]}>{message.text}</Text>}
+        <Text style={styles.redeemedText}>
+          {tr(
+            'Treasure unlocked: every theme and skin. Pick them in Collection!',
+            'Kho báu đã mở: toàn bộ theme và skin. Vào Bộ sưu tập để chọn nhé!',
+          )}
+        </Text>
+        <Text style={[styles.codeMessage, { color: '#3DCB4A' }]}>{message.text}</Text>
         <View style={{ height: 12 }} />
       </View>
     );
@@ -184,7 +267,13 @@ function GiftCodeCard() {
   return (
     <View style={styles.card}>
       <View style={styles.row}>
-        <Text style={styles.label}>Mã quà tặng</Text>
+        <Text style={styles.label}>{tr('Gift code', 'Mã quà tặng')}</Text>
+        {redeemed && (
+          <View style={styles.redeemedRow}>
+            <SymbolView name="crown.fill" size={16} tintColor="#FFD84D" style={styles.redeemedCrown} />
+            <Text style={styles.redeemedBadge}>{tr('Redeemed', 'Đã dùng')}</Text>
+          </View>
+        )}
       </View>
       <View style={styles.codeRow}>
         <TextInput
@@ -206,7 +295,7 @@ function GiftCodeCard() {
           onPress={redeem}
           disabled={code.trim().length === 0}
           style={[styles.codeButton, code.trim().length === 0 && styles.codeButtonDisabled]}>
-          <Text style={styles.codeButtonText}>Dùng</Text>
+          <Text style={styles.codeButtonText}>{tr('Redeem', 'Dùng')}</Text>
         </Pressable>
       </View>
       {message && (
@@ -222,6 +311,8 @@ const styles = StyleSheet.create({
   card: { marginHorizontal: 20, marginTop: 12, borderRadius: 16, backgroundColor: '#262D57', paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
   label: { color: COLORS.text, fontSize: 17, fontWeight: '600' },
+  langRow: { paddingVertical: 14, gap: 10 },
+  langOptions: { flexDirection: 'row', gap: 8 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#3A4275' },
   times: { flexDirection: 'row', gap: 8, paddingBottom: 12 },
   time: { flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center', backgroundColor: '#1F254A' },

@@ -5,7 +5,13 @@ export type Unlock = (typeof cosmetics.themes)[number]['unlock'] | (typeof cosme
 export const THEME_IDS = cosmetics.themes.map((t) => t.id);
 export const SKIN_IDS = cosmetics.skins.map((s) => s.id);
 export const DEFAULT_THEME = cosmetics.themes.find((t) => t.unlock.type === 'default')!.id;
+export const STARTER_THEMES = cosmetics.themes
+  .filter((t) => t.unlock.type === 'default' || t.unlock.type === 'free')
+  .map((t) => t.id);
 export const DEFAULT_SKIN = cosmetics.skins.find((s) => s.unlock.type === 'default')!.id;
+export const STARTER_SKINS = cosmetics.skins
+  .filter((s) => s.unlock.type === 'default' || s.unlock.type === 'free')
+  .map((s) => s.id);
 
 export function themeUnlock(id: string): Unlock | undefined {
   return cosmetics.themes.find((t) => t.id === id)?.unlock;

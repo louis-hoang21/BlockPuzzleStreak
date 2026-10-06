@@ -17,6 +17,15 @@ export function EmptyCell({ x, y, size, theme }: Props) {
   const y0 = y + inset;
   const r = size * 0.04;
 
+  if (theme.emptyCellStyle === 'wood') {
+    return (
+      <Group>
+        <RoundedRect x={x0} y={y0} width={s} height={s} r={r * 2} color={theme.emptyCell} />
+        <RoundedRect x={x0} y={y0} width={s} height={s * 0.14} r={r * 2} color="#3E2210" opacity={0.45} />
+        <Rect x={x0 + s * 0.12} y={y0 + s - 1.5} width={s * 0.76} height={1} color="#B07A4A" opacity={0.45} />
+      </Group>
+    );
+  }
   if (theme.emptyCellStyle !== 'sunset') {
     return <RoundedRect x={x0} y={y0} width={s} height={s} r={r} color={theme.emptyCell} />;
   }

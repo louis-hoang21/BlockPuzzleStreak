@@ -10,6 +10,9 @@ export interface Settings {
   reminderHour: number;
   reminderMinute: number;
   onboarded: boolean;
+  tutorialVersion: number;
+  giftHint: boolean;
+  boltHint: boolean;
   classicButtons: boolean;
 }
 
@@ -24,6 +27,9 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderHour: 19,
   reminderMinute: 0,
   onboarded: false,
+  tutorialVersion: 0,
+  giftHint: false,
+  boltHint: false,
   classicButtons: false,
 };
 

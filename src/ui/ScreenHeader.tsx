@@ -3,12 +3,14 @@ import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../i18n';
 import { COLORS } from '../render/theme';
 
 export function ScreenHeader({ title, right }: { title: string; right?: ReactNode }) {
+  const tr = useT();
   return (
     <View style={styles.header}>
-      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back" style={styles.side}>
+      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel={tr('Back', 'Quay lại')} style={styles.side}>
         <SymbolView name="chevron.left" size={22} tintColor={COLORS.text} style={styles.icon} />
       </Pressable>
       <Text style={styles.title}>{title}</Text>

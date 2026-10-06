@@ -1,49 +1,60 @@
+import type { Localized } from '../i18n';
+
 const fmt = (n: number) => n.toLocaleString();
 
-type Line = (score: number, best: number, gap: number, losses: number) => string;
+type Line = (score: number, best: number, gap: number, losses: number) => Localized;
 
 const NEW_BEST: Line[] = [
-  () => 'Đỉnh của chóp! Kỷ lục mới toanh.',
-  (s) => `${fmt(s)} điểm! Tay này là tay vàng rồi.`,
-  () => 'Phá kỷ lục ngon lành. Giữ phong độ nhé!',
-  () => 'Kỷ lục cũ vừa bị bạn cho về hưu.',
+  () => ({ en: 'Top of the top! A brand-new record.', vi: 'Đỉnh của chóp! Kỷ lục mới toanh.' }),
+  (s) => ({ en: `${fmt(s)} points! Those are golden hands.`, vi: `${fmt(s)} điểm! Tay này là tay vàng rồi.` }),
+  () => ({ en: 'Record smashed. Keep that form!', vi: 'Phá kỷ lục ngon lành. Giữ phong độ nhé!' }),
+  () => ({ en: 'Your old record just got sent into retirement.', vi: 'Kỷ lục cũ vừa bị bạn cho về hưu.' }),
 ];
 
 const SO_CLOSE: Line[] = [
-  (_s, _b, gap) => `Suýt nữa thôi! Thiếu đúng ${fmt(gap)} điểm.`,
-  (_s, _b, gap) => `Chỉ cách kỷ lục ${fmt(gap)} điểm. Làm ván nữa là phá!`,
-  (_s, b) => `Kỷ lục ${fmt(b)} đang run lẩy bẩy rồi đấy.`,
-  () => 'Gần lắm rồi, đừng bỏ cuộc lúc này!',
+  (_s, _b, gap) => ({ en: `So close! Just ${fmt(gap)} points short.`, vi: `Suýt nữa thôi! Thiếu đúng ${fmt(gap)} điểm.` }),
+  (_s, _b, gap) => ({
+    en: `Only ${fmt(gap)} points off your best. One more round and it falls!`,
+    vi: `Chỉ cách kỷ lục ${fmt(gap)} điểm. Làm ván nữa là phá!`,
+  }),
+  (_s, b) => ({ en: `Your ${fmt(b)} record is shaking in its boots.`, vi: `Kỷ lục ${fmt(b)} đang run lẩy bẩy rồi đấy.` }),
+  () => ({ en: "You're so close, don't quit now!", vi: 'Gần lắm rồi, đừng bỏ cuộc lúc này!' }),
 ];
 
 const ENCOURAGE: Line[] = [
-  () => 'Ván sau chắc chắn ngon hơn!',
-  () => 'Khởi động xong rồi, giờ mới chơi thật nè.',
-  () => 'Xếp khéo một chút là nổ liên tục đó.',
-  () => 'Thử giữ combo lâu hơn xem, điểm tăng vù vù.',
-  () => 'Ai cũng có ngày xui. Ván nữa nào!',
+  () => ({ en: 'Next round will be even better!', vi: 'Ván sau chắc chắn ngon hơn!' }),
+  () => ({ en: "Warm-up's over, now it gets real.", vi: 'Khởi động xong rồi, giờ mới chơi thật nè.' }),
+  () => ({ en: 'Place a bit smarter and the blasts keep coming.', vi: 'Xếp khéo một chút là nổ liên tục đó.' }),
+  () => ({ en: 'Keep your combo going longer and watch the points fly.', vi: 'Thử giữ combo lâu hơn xem, điểm tăng vù vù.' }),
+  () => ({ en: 'Everyone has an off day. One more!', vi: 'Ai cũng có ngày xui. Ván nữa nào!' }),
 ];
 
 const TEASE: Line[] = [
-  () => 'Bạn thực sự xếp hình thua một đứa trẻ ư?',
-  () => 'Em bé 5 tuổi nhà hàng xóm vừa phá kỷ lục này đấy.',
-  () => 'Xếp kiểu này thì mèo nhà mình cũng làm được.',
-  () => 'Tay run à? Hay khối hôm nay trơn quá?',
-  () => 'Lưới 8x8 thôi mà, đâu phải giải toán cao cấp.',
-  (s, b) => `Mới ${fmt(s)} điểm thôi á? Kỷ lục của bạn là ${fmt(b)} cơ mà!`,
-  (_s, _b, _g, losses) => `Thua kỷ lục ${fmt(losses)} lần. Định để yên vậy sao?`,
-  () => 'Hết chiêu thật rồi à? Kỷ lục đang cười khẩy đấy.',
-  () => 'Có vẻ hôm nay các khối không ưa bạn lắm.',
-  () => 'Khối 3x3 nhờ mình gửi lời hỏi thăm.',
-  () => 'Chơi thế này thì kỷ lục ngủ ngon rồi.',
-  () => 'Bàn cờ còn thấy thương bạn nữa là.',
-  (_s, b) => `Bạn của ván ${fmt(b)} điểm đâu rồi?`,
-  () => 'Bạn sợ à?',
-  () => 'Chan tiếp đê',
+  () => ({ en: 'Did a little kid really out-stack you?', vi: 'Bạn thực sự xếp hình thua một đứa trẻ ư?' }),
+  () => ({ en: "The neighbor's 5-year-old just beat this score.", vi: 'Em bé 5 tuổi nhà hàng xóm vừa phá kỷ lục này đấy.' }),
+  () => ({ en: 'My cat could stack like that.', vi: 'Xếp kiểu này thì mèo nhà mình cũng làm được.' }),
+  () => ({ en: 'Shaky hands? Or are the blocks slippery today?', vi: 'Tay run à? Hay khối hôm nay trơn quá?' }),
+  () => ({ en: "It's just an 8x8 grid, not rocket science.", vi: 'Lưới 8x8 thôi mà, đâu phải giải toán cao cấp.' }),
+  (s, b) => ({
+    en: `Only ${fmt(s)} points? Your best is ${fmt(b)}!`,
+    vi: `Mới ${fmt(s)} điểm thôi á? Kỷ lục của bạn là ${fmt(b)} cơ mà!`,
+  }),
+  (_s, _b, _g, losses) => ({
+    en: `Lost to your record ${fmt(losses)} times. Gonna let that slide?`,
+    vi: `Thua kỷ lục ${fmt(losses)} lần. Định để yên vậy sao?`,
+  }),
+  () => ({ en: 'Out of moves for real? Your record is smirking.', vi: 'Hết chiêu thật rồi à? Kỷ lục đang cười khẩy đấy.' }),
+  () => ({ en: "Looks like the blocks don't like you much today.", vi: 'Có vẻ hôm nay các khối không ưa bạn lắm.' }),
+  () => ({ en: 'The 3x3 block says hi.', vi: 'Khối 3x3 nhờ mình gửi lời hỏi thăm.' }),
+  () => ({ en: 'Play like that and your record sleeps easy.', vi: 'Chơi thế này thì kỷ lục ngủ ngon rồi.' }),
+  () => ({ en: 'Even the board feels sorry for you.', vi: 'Bàn cờ còn thấy thương bạn nữa là.' }),
+  (_s, b) => ({ en: `Where's the you who scored ${fmt(b)}?`, vi: `Bạn của ván ${fmt(b)} điểm đâu rồi?` }),
+  () => ({ en: 'Scared?', vi: 'Bạn sợ à?' }),
+  () => ({ en: 'Go again, come on!', vi: 'Chan tiếp đê' }),
 ];
 
 const LOW_SCORE = 1000;
-const LOW: Line[] = [() => 'Quêêêê'];
+const LOW: Line[] = [() => ({ en: 'Oops', vi: 'Quêêêê' })];
 
 const pick = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 
@@ -51,7 +62,7 @@ export type LineTone = 'newBest' | 'close' | 'encourage' | 'tease';
 
 export interface GameOverLine {
   tone: LineTone;
-  text: string;
+  text: Localized;
 }
 
 export function gameOverLine(score: number, best: number, newBest: boolean, losses: number): GameOverLine {

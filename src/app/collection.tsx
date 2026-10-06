@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { skinUnlock, themeUnlock, type Unlock } from '../core/cosmetics';
 import { hapticTap, hapticWarning } from '../haptics';
+import { useT, type Translate } from '../i18n';
 import { Block } from '../render/Block';
 import { EmptyCell } from '../render/EmptyCell';
 import { COLORS, SKINS, THEMES, skinById, type BoardTheme, type Skin } from '../render/theme';
@@ -12,17 +13,19 @@ import { useProgressStore } from '../store/progressStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { ScreenHeader } from '../ui/ScreenHeader';
 
-function unlockText(unlock: Unlock | undefined): string {
+function unlockText(tr: Translate, unlock: Unlock | undefined): string {
   if (!unlock) return '';
   switch (unlock.type) {
     case 'default':
-      return 'Mặc định';
+      return tr('Default', 'Mặc định');
+    case 'free':
+      return tr('Free', 'Miễn phí');
     case 'score':
-      return 'score' in unlock && unlock.score ? `Đạt ${unlock.score.toLocaleString()} điểm` : '';
+      return 'score' in unlock && unlock.score ? tr(`Score ${unlock.score.toLocaleString()}`, `Đạt ${unlock.score.toLocaleString()} điểm`) : '';
     case 'perfectClear':
-      return 'count' in unlock ? `Perfect Clear lần ${unlock.count}` : '';
+      return 'count' in unlock ? tr(`Perfect Clear #${unlock.count}`, `Perfect Clear lần ${unlock.count}`) : '';
     case 'combo':
-      return 'multiplier' in unlock ? `Đạt combo x${unlock.multiplier}` : '';
+      return 'multiplier' in unlock ? tr(`Reach combo x${unlock.multiplier}`, `Đạt combo x${unlock.multiplier}`) : '';
     default:
       return '';
   }
@@ -74,11 +77,12 @@ interface ItemProps {
 }
 
 function Item({ name, unlocked, selected, condition, preview, onPress }: ItemProps) {
+  const tr = useT();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={unlocked ? name : `${name}, đang khoá: ${condition}`}
+      accessibilityLabel={unlocked ? name : tr(`${name}, locked: ${condition}`, `${name}, đang khoá: ${condition}`)}
       style={[styles.item, selected && styles.itemSelected]}>
       <View style={!unlocked && styles.locked}>{preview}</View>
       {!unlocked && (
@@ -90,7 +94,7 @@ function Item({ name, unlocked, selected, condition, preview, onPress }: ItemPro
         {name}
       </Text>
       <Text style={[styles.itemSub, selected && styles.itemSubSelected]} numberOfLines={1}>
-        {selected ? 'Đang dùng' : unlocked ? 'Chạm để dùng' : condition}
+        {selected ? tr('In use', 'Đang dùng') : unlocked ? tr('Tap to use', 'Chạm để dùng') : condition}
       </Text>
     </Pressable>
   );
@@ -98,6 +102,7 @@ function Item({ name, unlocked, selected, condition, preview, onPress }: ItemPro
 
 export default function CollectionScreen() {
   const insets = useSafeAreaInsets();
+  const tr = useT();
   const unlockedThemes = useProgressStore((s) => s.unlockedThemes);
   const unlockedSkins = useProgressStore((s) => s.unlockedSkins);
   const { theme: themeId, skin: skinId, update } = useSettingsStore();
@@ -114,36 +119,36 @@ export default function CollectionScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Bộ sưu tập" />
+      <ScreenHeader title={tr('Collection', 'Bộ sưu tập')} />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 24 }}>
-        <Text style={styles.section}>Theme</Text>
+        <Text style={styles.section}>{tr('Themes', 'Theme')}</Text>
         <View style={styles.grid}>
           {THEMES.map((t) => {
             const unlocked = unlockedThemes.includes(t.id);
             return (
               <Item
                 key={t.id}
-                name={t.name}
+                name={tr(t.name)}
                 unlocked={unlocked}
                 selected={t.id === themeId}
-                condition={unlockText(themeUnlock(t.id))}
+                condition={unlockText(tr, themeUnlock(t.id))}
                 preview={<ThemePreview theme={t} skin={skin} />}
                 onPress={() => pick(unlocked, () => update({ theme: t.id }))}
               />
             );
           })}
         </View>
-        <Text style={styles.section}>Skin</Text>
+        <Text style={styles.section}>{tr('Block skins', 'Skin')}</Text>
         <View style={styles.grid}>
           {SKINS.map((s) => {
             const unlocked = unlockedSkins.includes(s.id);
             return (
               <Item
                 key={s.id}
-                name={s.name}
+                name={tr(s.name)}
                 unlocked={unlocked}
                 selected={s.id === skinId}
-                condition={unlockText(skinUnlock(s.id))}
+                condition={unlockText(tr, skinUnlock(s.id))}
                 preview={<SkinPreview skin={s} />}
                 onPress={() => pick(unlocked, () => update({ skin: s.id }))}
               />

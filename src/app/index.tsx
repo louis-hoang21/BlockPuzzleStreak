@@ -1,38 +1,72 @@
 import { router, type Href } from 'expo-router';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { ImageBackground, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ImageBackground, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CLASSIC_NAME, MODES } from '../core/modes';
+import { CLASSIC_NAME, MODES, STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticTap } from '../haptics';
+import { useT } from '../i18n';
 import { MODE_BUTTON_COLORS, ModeButton } from '../ui/ModeButton';
 
 const ART = require('../../assets/welcome.jpg');
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
+  const tr = useT();
+  const [picking, setPicking] = useState(false);
 
-  const openJackpot = () => {
+  const openPicker = () => {
     hapticTap();
-    router.push('/game/jackpot');
+    setPicking(true);
   };
 
-  const openClassic = () => {
+  const closePicker = () => {
     hapticTap();
-    router.push('/game/classic');
+    setPicking(false);
+  };
+
+  const openMode = (href: Href) => {
+    hapticTap();
+    setPicking(false);
+    router.push(href);
   };
 
   return (
     <ImageBackground source={ART} resizeMode="cover" style={styles.container}>
       <View style={[styles.topBar, { top: insets.top + 8 }]}>
-        <IconButton icon="paintpalette.fill" label="Bộ sưu tập" href="/collection" />
-        <IconButton icon="trophy.fill" label="Kỷ lục" href="/records" />
-        <IconButton icon="gearshape.fill" label="Cài đặt" href="/settings" />
+        <IconButton icon="paintpalette.fill" label={tr('Collection', 'Bộ sưu tập')} href="/collection" />
+        <IconButton icon="trophy.fill" label={tr('Records', 'Kỷ lục')} href="/records" />
+        <IconButton icon="gearshape.fill" label={tr('Settings', 'Cài đặt')} href="/settings" />
       </View>
-      <View style={[styles.modes, { paddingBottom: insets.bottom + 20 }]}>
-        <ModeButton label={MODES[0].name} colors={MODE_BUTTON_COLORS.green} onPress={openJackpot} />
-        <ModeButton label={CLASSIC_NAME} colors={MODE_BUTTON_COLORS.blue} onPress={openClassic} />
+      <View style={[styles.start, { paddingBottom: insets.bottom + 48 }]}>
+        <ModeButton label={tr('Start', 'Bắt đầu')} colors={MODE_BUTTON_COLORS.green} onPress={openPicker} chevron={false} />
       </View>
+
+      <Modal visible={picking} transparent animationType="fade" onRequestClose={closePicker}>
+        <Pressable style={styles.backdrop} onPress={closePicker} accessibilityLabel={tr('Close', 'Đóng')}>
+          <Pressable style={styles.sheet} onPress={() => {}} accessibilityViewIsModal>
+            <Text style={styles.title}>{tr('Choose a mode', 'Chọn chế độ chơi')}</Text>
+            <View style={styles.modes}>
+              <ModeButton label={tr(MODES[0].name)} colors={MODE_BUTTON_COLORS.green} onPress={() => openMode('/game/jackpot')} />
+              <ModeButton
+                label={tr(STORM_PUZZLE_NAME)}
+                colors={MODE_BUTTON_COLORS.orange}
+                onPress={() => openMode('/game/storm-puzzle')}
+              />
+              <ModeButton label={tr(CLASSIC_NAME)} colors={MODE_BUTTON_COLORS.blue} onPress={() => openMode('/game/classic')} />
+            </View>
+            <Pressable
+              onPress={closePicker}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={tr('Close', 'Đóng')}
+              style={({ pressed }) => [styles.close, pressed && styles.iconButtonPressed]}>
+              <SymbolView name="xmark" size={14} weight="heavy" tintColor="#7A4A1E" style={styles.closeIcon} />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
     </ImageBackground>
   );
@@ -55,7 +89,7 @@ function IconButton({ icon, label, href }: { icon: SFSymbol; label: string; href
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#1B1F3B' },
+  container: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#F7DDA4' },
   topBar: { position: 'absolute', right: 16, flexDirection: 'row', gap: 10 },
   iconButton: {
     width: 42,
@@ -69,5 +103,42 @@ const styles = StyleSheet.create({
   },
   iconButtonPressed: { opacity: 0.6 },
   icon: { width: 20, height: 20 },
-  modes: { alignSelf: 'center', width: 230, gap: 10 },
+  start: { alignSelf: 'center', width: 160 },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(40, 22, 6, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFF4DC',
+    borderRadius: 24,
+    borderWidth: 4,
+    borderColor: '#B9773A',
+    paddingTop: 22,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  title: { fontSize: 22, fontWeight: '900', color: '#7A4A1E', marginBottom: 18 },
+  modes: { alignSelf: 'stretch', gap: 12 },
+  close: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(122, 74, 30, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeIcon: { width: 14, height: 14 },
 });

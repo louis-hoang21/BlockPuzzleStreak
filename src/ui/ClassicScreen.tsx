@@ -16,13 +16,15 @@ import {
   hold,
   move,
   rotate,
+  rushSpeed,
   tick,
   type ClassicEvent,
   type ClassicState,
   type Step,
 } from '../core/classic/engine';
 import { stageColor } from '../core/stages';
-import { hapticCelebrate, hapticClear, hapticCombo, hapticPlace, hapticTap } from '../haptics';
+import { hapticCelebrate, hapticClear, hapticCombo, hapticPlace, hapticTap, hapticWarning } from '../haptics';
+import { t, useT } from '../i18n';
 import { Fireworks } from '../render/Fireworks';
 import { ThemeBackdrop } from '../render/Backdrops';
 import { ClassicBoard, CLEAR_MS, type ClassicClear } from '../render/ClassicBoard';
@@ -61,6 +63,10 @@ type Phase = 'ready' | 'countdown' | 'running' | 'paused';
 
 const RECORD_SFX_DELAY_MS = 500;
 const LEVEL_SFX_DELAY_MS = 350;
+const GIFT_SFX_DELAY_MS = 120;
+const BOLT_SECONDS = Math.round(cfg.bolt.durationMs / 1000);
+const rushSeconds = (s: ClassicState) => Math.ceil((s.rushMs ?? 0) / 1000);
+const rushLabel = (s: ClassicState) => rushSpeed(s.rushMs ?? 0).toFixed(1);
 const MAX_FRAME_MS = 100;
 const SOFT_DROP_CELLS = 0.6;
 const HARD_DROP_VELOCITY = 700;
@@ -87,6 +93,7 @@ function initialGame(): ClassicState {
 
 export function ClassicScreen() {
   const insets = useSafeAreaInsets();
+  const tr = useT();
   const [stored] = useState(initialGame);
   const result = useClassicStore((s) => s.result);
   const bestScore = useRecordsStore((s) => s.byMode.classic.bestScore);
@@ -152,6 +159,7 @@ export function ClassicScreen() {
       let lines = 0;
       let combo = 0;
       let perfect = false;
+      let stormed = false;
       const hardDropped = events.some((e) => e.type === 'hardDrop');
       for (const e of events) {
         if (e.type === 'hardDrop') {
@@ -162,10 +170,11 @@ export function ClassicScreen() {
           lines = e.lines;
           combo = e.combo;
           perfect = e.perfect;
-          setClearing({ id, cells: e.cells, rows: e.rows, lines: e.lines });
+          setClearing({ id, cells: e.cells, rows: e.rows, lines: e.lines, storm: e.storm });
           const shown = e.before.slice();
           for (const r of e.rows) shown.fill(0, r * next.cols, (r + 1) * next.cols);
-          setView({ ...next, cells: shown, active: null });
+          if (e.storm) for (const c of e.storm.cols) for (let r = 0; r < next.rows; r++) shown[r * next.cols + c] = 0;
+          setView({ ...next, cells: shown, active: null, gift: -1, bolt: -1 });
           holdUntil.current = performance.now() + CLEAR_MS;
           setTimeout(() => setView(engine.current), CLEAR_MS);
           setPopup({ id, points: e.points, label: e.perfect ? 'Amazing!' : null });
@@ -173,6 +182,39 @@ export function ClassicScreen() {
           if (e.lines >= 2) setMultiLines({ id, lines: e.lines });
           if (e.lines >= 3) shakeX.set(shake(10));
           if (e.perfect) setFireworks(id);
+          if (e.storm) {
+            stormed = true;
+            shakeX.set(shake(16));
+            setTimeout(() => {
+              hapticCelebrate();
+              playSfx('rotate');
+            }, GIFT_SFX_DELAY_MS);
+          }
+        }
+        if (e.type === 'clear' && e.bolt) {
+          shakeX.set(shake(8));
+          useNoticeStore
+            .getState()
+            .push(
+              t(
+                `Lightning! Blocks speed up for ${BOLT_SECONDS}s`,
+                `Sét đánh! Khối rơi nhanh dần trong ${BOLT_SECONDS} giây`,
+              ),
+            );
+          setTimeout(() => {
+            hapticWarning();
+            playSfx('drop');
+          }, GIFT_SFX_DELAY_MS);
+        }
+        if (e.type === 'bolt' && !useSettingsStore.getState().boltHint) {
+          useSettingsStore.getState().update({ boltHint: true });
+          useNoticeStore
+            .getState()
+            .push(t('Lightning block! Clearing its row speeds up the fall', 'Khối có sét! Nổ hàng có sét thì khối rơi nhanh hơn'));
+        }
+        if (e.type === 'gift' && !useSettingsStore.getState().giftHint) {
+          useSettingsStore.getState().update({ giftHint: true });
+          useNoticeStore.getState().push(t('Gift block! Clear its row to call a storm', 'Khối có nơ! Làm nổ hàng có nơ để gọi bão'));
         }
         if (e.type === 'levelUp') {
           setLevelEvent({ id, level: e.level });
@@ -184,7 +226,9 @@ export function ClassicScreen() {
           }, LEVEL_SFX_DELAY_MS);
         }
       }
-      if (perfect) {
+      if (stormed && !perfect) {
+        playSfx('clear');
+      } else if (perfect) {
         hapticCelebrate();
         playSfx('fireworks');
         setTimeout(() => playSfx('amazing'), 250);
@@ -245,7 +289,8 @@ export function ClassicScreen() {
         next.over !== prev.over ||
         next.score !== prev.score ||
         next.level !== prev.level ||
-        next.lines !== prev.lines
+        next.lines !== prev.lines ||
+        rushSeconds(next) !== rushSeconds(prev)
       ) {
         setView(next);
       }
@@ -418,6 +463,14 @@ export function ClassicScreen() {
           <GestureDetector gesture={gesture}>
             <Animated.View style={[StyleSheet.absoluteFill, shakeStyle]}>
               <ClassicBoard layout={layout} state={view} clearing={clearing} theme={theme} skin={skin} />
+              {rushSeconds(view) > 0 && (
+                <View pointerEvents="none" style={[styles.rush, { left: layout.boardX, top: layout.boardY + 8, width: layout.boardW }]}>
+                  <View style={styles.rushPill}>
+                    <SymbolView name="bolt.fill" size={14} tintColor="#FFD43B" style={styles.rushIcon} />
+                    <Text style={styles.rushText}>{tr(`Speed x${rushLabel(view)} · ${rushSeconds(view)}s`, `Tốc độ x${rushLabel(view)} · ${rushSeconds(view)}s`)}</Text>
+                  </View>
+                </View>
+              )}
               <Text
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -427,7 +480,7 @@ export function ClassicScreen() {
                   { left: layout.sideX, top: layout.holdY - layout.labelH, width: layout.sideW, color: hud.textDim },
                 ]}
               >
-                Giữ
+                {tr('Hold', 'Giữ')}
               </Text>
               <Text
                 numberOfLines={1}
@@ -438,7 +491,7 @@ export function ClassicScreen() {
                   { left: layout.sideX, top: layout.nextY - layout.labelH, width: layout.sideW, color: hud.textDim },
                 ]}
               >
-                Tiếp theo
+                {tr('Next', 'Tiếp theo')}
               </Text>
             </Animated.View>
           </GestureDetector>
@@ -460,7 +513,7 @@ export function ClassicScreen() {
         )}
         {layout && levelEvent && (
           <PopBanner key={`level-${levelEvent.id}`} top={Math.max(0, centerY - 260)}>
-            <Text style={styles.levelText}>Cấp {levelEvent.level}!</Text>
+            <Text style={styles.levelText}>{tr(`Level ${levelEvent.level}!`, `Cấp ${levelEvent.level}!`)}</Text>
           </PopBanner>
         )}
         {layout && multiLines && (
@@ -488,20 +541,20 @@ export function ClassicScreen() {
             <Text style={styles.countdown}>{count}</Text>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>{phase === 'paused' ? 'Tạm dừng' : 'Sẵn sàng?'}</Text>
+              <Text style={styles.cardTitle}>{phase === 'paused' ? tr('Paused', 'Tạm dừng') : tr('Ready?', 'Sẵn sàng?')}</Text>
               <View style={styles.help}>
-                <HelpRow icon="hand.tap.fill" text="Chạm: xoay khối" />
-                <HelpRow icon="arrow.left.and.right" text="Kéo ngang: di chuyển" />
-                <HelpRow icon="arrow.down" text="Kéo xuống giữ tay: rơi nhanh" />
-                <HelpRow icon="arrow.down.to.line" text="Vuốt mạnh xuống: thả thẳng" />
-                <HelpRow icon="arrow.up" text="Vuốt lên: giữ khối" />
+                <HelpRow icon="hand.tap.fill" text={tr('Tap: rotate', 'Chạm: xoay khối')} />
+                <HelpRow icon="arrow.left.and.right" text={tr('Drag sideways: move', 'Kéo ngang: di chuyển')} />
+                <HelpRow icon="arrow.down" text={tr('Drag down and hold: soft drop', 'Kéo xuống giữ tay: rơi nhanh')} />
+                <HelpRow icon="arrow.down.to.line" text={tr('Flick down: hard drop', 'Vuốt mạnh xuống: thả thẳng')} />
+                <HelpRow icon="arrow.up" text={tr('Swipe up: hold block', 'Vuốt lên: giữ khối')} />
               </View>
               <View style={styles.buttonRow}>
                 <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-                  <Text style={styles.secondaryText}>Về menu</Text>
+                  <Text style={styles.secondaryText}>{tr('Menu', 'Về menu')}</Text>
                 </Pressable>
                 <Pressable style={styles.primaryButton} onPress={startCountdown}>
-                  <Text style={styles.primaryText}>{phase === 'paused' ? 'Tiếp tục' : 'Bắt đầu'}</Text>
+                  <Text style={styles.primaryText}>{phase === 'paused' ? tr('Resume', 'Tiếp tục') : tr('Start', 'Bắt đầu')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -516,9 +569,9 @@ export function ClassicScreen() {
           result={result}
           losses={losses}
           stats={[
-            { label: 'Hàng', value: view.lines },
-            { label: 'Cấp', value: view.level },
-            { label: 'Combo cao nhất', value: view.stats.maxCombo > 0 ? `x${view.stats.maxCombo}` : '–' },
+            { label: tr('Lines', 'Hàng'), value: view.lines },
+            { label: tr('Level', 'Cấp'), value: view.level },
+            { label: tr('Best combo', 'Combo cao nhất'), value: view.stats.maxCombo > 0 ? `x${view.stats.maxCombo}` : '–' },
           ]}
           recordFireworks={over.recordFireworks}
           showReview={over.showReview}
@@ -527,7 +580,7 @@ export function ClassicScreen() {
         />
       )}
 
-      {notice?.apply && <ApplyPrompt key={notice.id} notice={notice} />}
+      {notice?.apply && <ApplyPrompt key={`apply-${notice.id}`} notice={notice} />}
     </View>
   );
 }
@@ -552,9 +605,10 @@ const ClassicHeader = memo(function ClassicHeader({
   onPause: () => void;
 }) {
   const hud = hudColors(tone);
+  const tr = useT();
   return (
     <View style={styles.header}>
-      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back" style={styles.iconButton}>
+      <Pressable onPress={() => router.back()} hitSlop={12} accessibilityLabel={tr('Back', 'Quay lại')} style={styles.iconButton}>
         <SymbolView name="chevron.left" size={22} tintColor={hud.text} style={styles.icon} />
       </Pressable>
       <View style={styles.scoreBox}>
@@ -568,7 +622,7 @@ const ClassicHeader = memo(function ClassicHeader({
           </Text>
           <Text style={[styles.sub, { color: hud.textDim }]}>
             {' '}
-            · Cấp {level} · {lines} hàng
+            {tr(`· Level ${level} · ${lines} lines`, `· Cấp ${level} · ${lines} hàng`)}
           </Text>
         </View>
       </View>
@@ -576,7 +630,7 @@ const ClassicHeader = memo(function ClassicHeader({
         onPress={onPause}
         hitSlop={8}
         accessibilityRole="button"
-        accessibilityLabel="Tạm dừng"
+        accessibilityLabel={tr('Pause', 'Tạm dừng')}
         disabled={!running}
         style={({ pressed }) => [
           styles.pauseButton,
@@ -607,14 +661,15 @@ const ControlBar = memo(function ControlBar({
 }) {
   const left = useCallback(() => onMove(-1), [onMove]);
   const right = useCallback(() => onMove(1), [onMove]);
+  const tr = useT();
   return (
     <View style={styles.controls}>
-      <ControlButton icon="arrow.left" label="Sang trái" repeat onPress={left} disabled={!running} />
-      <ControlButton icon="arrow.clockwise" label="Xoay" onPress={onRotate} disabled={!running} />
-      <ControlButton icon="arrow.right" label="Sang phải" repeat onPress={right} disabled={!running} />
-      <ControlButton icon="arrow.down" label="Rơi nhanh" onPress={noop} onHoldChange={onSoft} disabled={!running} />
-      <ControlButton icon="arrow.down.to.line" label="Thả thẳng" onPress={onHardDrop} disabled={!running} />
-      <ControlButton icon="tray.and.arrow.down.fill" label="Giữ khối" onPress={onHold} disabled={!running} />
+      <ControlButton icon="arrow.left" label={tr('Move left', 'Sang trái')} repeat onPress={left} disabled={!running} />
+      <ControlButton icon="arrow.clockwise" label={tr('Rotate', 'Xoay')} onPress={onRotate} disabled={!running} />
+      <ControlButton icon="arrow.right" label={tr('Move right', 'Sang phải')} repeat onPress={right} disabled={!running} />
+      <ControlButton icon="arrow.down" label={tr('Soft drop', 'Rơi nhanh')} onPress={noop} onHoldChange={onSoft} disabled={!running} />
+      <ControlButton icon="arrow.down.to.line" label={tr('Hard drop', 'Thả thẳng')} onPress={onHardDrop} disabled={!running} />
+      <ControlButton icon="tray.and.arrow.down.fill" label={tr('Hold block', 'Giữ khối')} onPress={onHold} disabled={!running} />
     </View>
   );
 });
@@ -718,6 +773,20 @@ const styles = StyleSheet.create({
   controlPressed: { backgroundColor: 'rgba(60, 70, 140, 0.9)' },
   controlIcon: { width: 22, height: 22 },
   sideLabel: { position: 'absolute', textAlign: 'center', fontSize: 13, fontWeight: '800' },
+  rush: { position: 'absolute', alignItems: 'center' },
+  rushPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(20, 14, 0, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 212, 59, 0.6)',
+  },
+  rushIcon: { width: 14, height: 14 },
+  rushText: { color: '#FFE680', fontSize: 13, fontWeight: '900' },
   levelText: {
     color: '#FFD84D',
     fontSize: 46,

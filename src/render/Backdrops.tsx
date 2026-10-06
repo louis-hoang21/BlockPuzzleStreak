@@ -6,6 +6,8 @@ import {
   Group,
   LinearGradient,
   Path,
+  Rect,
+  RoundedRect,
   Skia,
   vec,
   type SkPath,
@@ -16,7 +18,7 @@ import { StyleSheet, useWindowDimensions } from 'react-native';
 import { mulberry32 } from '../core/rng';
 import { SpaceBackdrop } from './SpaceBackdrop';
 
-export type BackdropKind = 'night' | 'forest' | 'ocean' | 'space';
+export type BackdropKind = 'night' | 'forest' | 'ocean' | 'space' | 'kitchen';
 
 const FAINT = 0.55;
 
@@ -30,6 +32,8 @@ function ThemeBackdropView({ kind }: { kind: BackdropKind }) {
       return <OceanBackdrop />;
     case 'space':
       return <SpaceBackdrop />;
+    case 'kitchen':
+      return <KitchenBackdrop />;
   }
 }
 
@@ -365,6 +369,96 @@ function OceanBackdrop() {
             <CornerPathEffect r={f.r * 0.3} />
           </Path>
         ))}
+      </Group>
+    </Canvas>
+  );
+}
+
+function KitchenBackdrop() {
+  const { width: w, height: h } = useWindowDimensions();
+  const scene = useMemo(() => {
+    const rng = mulberry32(601);
+    const rays = [0.05, 0.22, 0.4].map((offset, i) => {
+      const x0 = w * offset;
+      const spread = w * (0.12 + i * 0.03);
+      return Skia.PathBuilder.Make()
+        .moveTo(x0, 0)
+        .lineTo(x0 + spread, 0)
+        .lineTo(x0 + spread + w * 0.55, h * 0.75)
+        .lineTo(x0 + w * 0.45, h * 0.75)
+        .close()
+        .build();
+    });
+    const bokeh = Array.from({ length: 9 }, () => ({
+      x: rng() * w,
+      y: h * (0.1 + rng() * 0.75),
+      r: w * (0.03 + rng() * 0.05),
+    }));
+    const flour = Array.from({ length: 40 }, () => ({ x: rng() * w, y: rng() * h * 0.85, r: 0.6 + rng() * 1.4 }));
+    const tableY = h * 0.88;
+    const grain = Skia.PathBuilder.Make();
+    for (let i = 0; i < 5; i++) {
+      const gy = tableY + ((h - tableY) * (i + 0.6)) / 5;
+      grain.moveTo(0, gy).cubicTo(w * 0.3, gy + 3, w * 0.7, gy - 3, w, gy);
+    }
+    return { rays, bokeh, flour, tableY, grain: grain.build() };
+  }, [w, h]);
+  const win = { x: -w * 0.04, y: h * 0.03, w: w * 0.36, h: h * 0.24 };
+  const shelfY = h * 0.13;
+
+  return (
+    <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
+      <Rect x={0} y={0} width={w} height={h} opacity={0.7}>
+        <LinearGradient start={vec(0, 0)} end={vec(0, h)} colors={['#F7E6C8', '#EBCB9C', '#D9AE78']} />
+      </Rect>
+      <Group opacity={FAINT}>
+        <Circle cx={win.x + win.w * 0.55} cy={win.y + win.h * 0.5} r={w * 0.35} color="#FFF6E0">
+          <BlurMask blur={40} style="normal" />
+        </Circle>
+        <RoundedRect x={win.x} y={win.y} width={win.w} height={win.h} r={10} color="#FFFDF5" opacity={0.7} />
+        <Rect x={win.x + win.w / 2 - 2} y={win.y} width={4} height={win.h} color="#C48A55" opacity={0.6} />
+        <Rect x={win.x} y={win.y + win.h / 2 - 2} width={win.w} height={4} color="#C48A55" opacity={0.6} />
+        <RoundedRect
+          x={win.x}
+          y={win.y}
+          width={win.w}
+          height={win.h}
+          r={10}
+          color="#B07A4A"
+          style="stroke"
+          strokeWidth={6}
+          opacity={0.6}
+        />
+        {scene.rays.map((ray, i) => (
+          <Path key={i} path={ray} color="#FFF8E6" opacity={0.35}>
+            <BlurMask blur={14} style="normal" />
+          </Path>
+        ))}
+        <Rect x={w * 0.58} y={shelfY} width={w * 0.46} height={8} color="#9C6638" opacity={0.7} />
+        {[0.63, 0.74, 0.86].map((x, i) => (
+          <RoundedRect
+            key={i}
+            x={w * x}
+            y={shelfY - h * (0.045 + (i % 2) * 0.012)}
+            width={w * 0.07}
+            height={h * (0.045 + (i % 2) * 0.012)}
+            r={6}
+            color={['#E8D6B8', '#C9A27A', '#F0E2C8'][i]}
+            opacity={0.8}
+          />
+        ))}
+        {scene.bokeh.map((b, i) => (
+          <Circle key={i} cx={b.x} cy={b.y} r={b.r} color="#FFF1D2" opacity={0.35}>
+            <BlurMask blur={8} style="normal" />
+          </Circle>
+        ))}
+        {scene.flour.map((f, i) => (
+          <Circle key={i} cx={f.x} cy={f.y} r={f.r} color="white" opacity={0.7} />
+        ))}
+        <Rect x={0} y={scene.tableY} width={w} height={h - scene.tableY}>
+          <LinearGradient start={vec(0, scene.tableY)} end={vec(0, h)} colors={['#C98A4E', '#9C6235']} />
+        </Rect>
+        <Path path={scene.grain} style="stroke" strokeWidth={1.5} color="#6E3F1C" opacity={0.4} />
       </Group>
     </Canvas>
   );

@@ -27,6 +27,17 @@ export interface ClassicState {
   active: ActivePiece | null;
   queue: ClassicShape[];
   bag: ClassicShape[];
+  queueGifts?: number[];
+  activeGift?: number;
+  holdGift?: number;
+  gift?: number;
+  giftChance?: number;
+  queueBolts?: number[];
+  activeBolt?: number;
+  holdBolt?: number;
+  bolt?: number;
+  boltChance?: number;
+  rushMs?: number;
   hold: ClassicShape | null;
   holdUsed: boolean;
   score: number;
@@ -60,9 +71,20 @@ export type ClassicEvent =
       combo: number;
       points: number;
       perfect: boolean;
+      storm?: GiftStorm;
+      bolt: boolean;
     }
+  | { type: 'gift' }
+  | { type: 'bolt' }
   | { type: 'levelUp'; level: number }
   | { type: 'over' };
+
+export interface GiftStorm {
+  row: number;
+  col: number;
+  rows: number[];
+  cols: number[];
+}
 
 export interface Step {
   state: ClassicState;
@@ -96,18 +118,54 @@ function grounded(state: ClassicState, piece: ActivePiece): boolean {
   return !fits(state, { ...piece, row: piece.row + 1 });
 }
 
+const NO_GIFT = -1;
+
+function queueGiftsOf(state: ClassicState): number[] {
+  return state.queueGifts ?? state.queue.map(() => NO_GIFT);
+}
+
+function queueBoltsOf(state: ClassicState): number[] {
+  return state.queueBolts ?? state.queue.map(() => NO_GIFT);
+}
+
+function hasBolt(state: ClassicState, queueBolts: readonly number[]): boolean {
+  return (
+    (state.bolt ?? NO_GIFT) >= 0 ||
+    (state.activeBolt ?? NO_GIFT) >= 0 ||
+    (state.holdBolt ?? NO_GIFT) >= 0 ||
+    queueBolts.some((b) => b >= 0)
+  );
+}
+
+function hasGift(state: ClassicState, queueGifts: readonly number[]): boolean {
+  return (
+    (state.gift ?? NO_GIFT) >= 0 ||
+    (state.activeGift ?? NO_GIFT) >= 0 ||
+    (state.holdGift ?? NO_GIFT) >= 0 ||
+    queueGifts.some((g) => g >= 0)
+  );
+}
+
 function refill(state: ClassicState): ClassicState {
   let { queue, bag, rngState } = state;
   if (queue.length > cfg.preview) return state;
   queue = [...queue];
   bag = [...bag];
+  const queueGifts = [...queueGiftsOf(state)];
+  const queueBolts = [...queueBoltsOf(state)];
   const rng = createRng(rngState);
   while (queue.length <= cfg.preview) {
     if (bag.length === 0) bag = shuffledBag(rng.next);
-    queue.push(bag.shift()!);
+    const shape = bag.shift()!;
+    queue.push(shape);
+    const giftable = !hasGift(state, queueGifts) && rng.next() < (state.giftChance ?? cfg.gift.chance);
+    queueGifts.push(giftable ? Math.floor(rng.next() * shapeCells(shape, 0).length) : NO_GIFT);
+    const boltable =
+      !giftable && !hasBolt(state, queueBolts) && rng.next() < (state.boltChance ?? cfg.bolt.chance);
+    queueBolts.push(boltable ? Math.floor(rng.next() * shapeCells(shape, 0).length) : NO_GIFT);
   }
   rngState = rng.state();
-  return { ...state, queue, bag, rngState };
+  return { ...state, queue, bag, queueGifts, queueBolts, rngState };
 }
 
 function spawnPiece(shape: ClassicShape, cols: number, hidden: number): ActivePiece {
@@ -116,21 +174,38 @@ function spawnPiece(shape: ClassicShape, cols: number, hidden: number): ActivePi
   return { shape, rot: 0, row: hidden - top, col: Math.floor((cols - box) / 2) };
 }
 
-function spawn(state: ClassicState, shape?: ClassicShape): Step {
+function spawn(state: ClassicState, shape?: ClassicShape, gift = NO_GIFT, bolt = NO_GIFT): Step {
   let next = state;
   let id = shape;
+  let activeGift = gift;
+  let activeBolt = bolt;
   if (!id) {
     next = refill(next);
     id = next.queue[0];
-    next = refill({ ...next, queue: next.queue.slice(1) });
+    const gifts = queueGiftsOf(next);
+    const bolts = queueBoltsOf(next);
+    activeGift = gifts[0] ?? NO_GIFT;
+    activeBolt = bolts[0] ?? NO_GIFT;
+    next = refill({
+      ...next,
+      queue: next.queue.slice(1),
+      queueGifts: gifts.slice(1),
+      queueBolts: bolts.slice(1),
+      activeGift,
+      activeBolt,
+    });
   }
   const active = spawnPiece(id, next.cols, next.hidden);
-  next = { ...next, active, fallMs: 0, lockMs: 0, lockResets: 0 };
+  next = { ...next, active, activeGift, activeBolt, fallMs: 0, lockMs: 0, lockResets: 0 };
   if (!fits(next, active)) return { state: { ...next, over: true }, events: [{ type: 'over' }] };
   return { state: next, events: [] };
 }
 
-export function newClassic(seed: number): ClassicState {
+export function newClassic(
+  seed: number,
+  giftChance: number = cfg.gift.chance,
+  boltChance: number = cfg.bolt.chance,
+): ClassicState {
   const cols = cfg.cols;
   const rows = cfg.rows + cfg.hiddenRows;
   const base: ClassicState = {
@@ -152,6 +227,8 @@ export function newClassic(seed: number): ClassicState {
     lockResets: 0,
     rngState: seed >>> 0,
     seed,
+    giftChance,
+    boltChance,
     stats: { pieces: 0, linesCleared: 0, maxCombo: 0, maxLinesAtOnce: 0, perfectClears: 0 },
     over: false,
   };
@@ -198,6 +275,19 @@ function lock(state: ClassicState): Step {
   for (const [r, c] of placed) if (r >= 0) cells[r * cols + c] = color;
   const events: ClassicEvent[] = [{ type: 'lock' }];
 
+  let gift = state.gift ?? NO_GIFT;
+  const activeGift = state.activeGift ?? NO_GIFT;
+  if (activeGift >= 0) {
+    const [gr, gc] = placed[activeGift] ?? [-1, -1];
+    gift = gr >= 0 ? gr * cols + gc : NO_GIFT;
+  }
+  let bolt = state.bolt ?? NO_GIFT;
+  const activeBolt = state.activeBolt ?? NO_GIFT;
+  if (activeBolt >= 0) {
+    const [br, bc] = placed[activeBolt] ?? [-1, -1];
+    bolt = br >= 0 ? br * cols + bc : NO_GIFT;
+  }
+
   const full: number[] = [];
   for (let r = 0; r < state.rows; r++) {
     let isFull = true;
@@ -209,46 +299,80 @@ function lock(state: ClassicState): Step {
     ...state,
     cells,
     active: null,
+    activeGift: NO_GIFT,
+    gift,
+    activeBolt: NO_GIFT,
+    bolt,
     holdUsed: false,
     stats: { ...state.stats, pieces: state.stats.pieces + 1 },
   };
 
   if (full.length > 0) {
+    const giftRow = gift >= 0 ? Math.floor(gift / cols) : -1;
+    let storm: GiftStorm | undefined;
+    let removed = full;
+    const swept = new Set<number>();
+    if (giftRow >= 0 && full.includes(giftRow)) {
+      const giftCol = gift % cols;
+      const rows = [giftRow - 1, giftRow, giftRow + 1].filter((r) => r >= 0 && r < state.rows);
+      const sweptCols = [giftCol - 1, giftCol, giftCol + 1].filter((c) => c >= 0 && c < cols);
+      storm = { row: giftRow, col: giftCol, rows, cols: sweptCols };
+      removed = [...new Set([...full, ...rows])].sort((a, b) => a - b);
+      for (const c of sweptCols) for (let r = 0; r < state.rows; r++) swept.add(r * cols + c);
+    }
     const cleared: ClearedCell[] = [];
-    for (const r of full)
-      for (let c = 0; c < cols; c++) cleared.push({ row: r, col: c, color: cells[r * cols + c] - 1 });
+    const seen = new Set<number>();
+    const take = (i: number) => {
+      if (seen.has(i) || cells[i] === 0) return;
+      seen.add(i);
+      cleared.push({ row: Math.floor(i / cols), col: i % cols, color: cells[i] - 1 });
+    };
+    for (const r of removed) for (let c = 0; c < cols; c++) take(r * cols + c);
+    for (const i of swept) take(i);
+    const sweptCells = cells.map((v, i) => (swept.has(i) ? 0 : v));
     const kept: number[] = [];
-    for (let r = 0; r < state.rows; r++) if (!full.includes(r)) kept.push(...cells.slice(r * cols, (r + 1) * cols));
-    const nextCells = new Array<number>(full.length * cols).fill(0).concat(kept);
+    for (let r = 0; r < state.rows; r++) if (!removed.includes(r)) kept.push(...sweptCells.slice(r * cols, (r + 1) * cols));
+    const nextCells = new Array<number>(removed.length * cols).fill(0).concat(kept);
+    if (storm) gift = NO_GIFT;
+    else if (giftRow >= 0) gift = (giftRow + removed.filter((r) => r > giftRow).length) * cols + (gift % cols);
+    const boltRow = bolt >= 0 ? Math.floor(bolt / cols) : -1;
+    const struck = boltRow >= 0 && (removed.includes(boltRow) || swept.has(bolt));
+    if (struck) bolt = NO_GIFT;
+    else if (boltRow >= 0) bolt = (boltRow + removed.filter((r) => r > boltRow).length) * cols + (bolt % cols);
     const perfect = nextCells.every((v) => v === 0);
     const combo = state.combo + 1;
-    const lines = state.lines + full.length;
+    const lines = state.lines + removed.length;
     const level = levelFor(lines);
-    const points = clearPoints(full.length, combo, state.level, perfect);
+    const points = clearPoints(removed.length, combo, state.level, perfect) + (storm ? cfg.gift.bonus * state.level : 0);
     next = {
       ...next,
       cells: nextCells,
+      gift,
+      bolt,
+      rushMs: struck ? cfg.bolt.durationMs : next.rushMs,
       combo,
       lines,
       level,
       score: next.score + points,
       stats: {
         ...next.stats,
-        linesCleared: next.stats.linesCleared + full.length,
+        linesCleared: next.stats.linesCleared + removed.length,
         maxCombo: Math.max(next.stats.maxCombo, combo),
-        maxLinesAtOnce: Math.max(next.stats.maxLinesAtOnce, full.length),
+        maxLinesAtOnce: Math.max(next.stats.maxLinesAtOnce, removed.length),
         perfectClears: next.stats.perfectClears + (perfect ? 1 : 0),
       },
     };
     events.push({
       type: 'clear',
-      rows: full,
+      rows: removed,
       cells: cleared,
       before: cells,
-      lines: full.length,
+      lines: removed.length,
       combo,
       points,
       perfect,
+      storm,
+      bolt: struck,
     });
     if (level > state.level) events.push({ type: 'levelUp', level });
   } else {
@@ -257,8 +381,20 @@ function lock(state: ClassicState): Step {
 
   const lockedOut = placed.every(([r]) => r < state.hidden);
   if (lockedOut) return { state: { ...next, over: true }, events: [...events, { type: 'over' }] };
+  const hadGift = queueGiftsOf(next).some((g) => g >= 0);
+  const hadBolt = queueBoltsOf(next).some((b) => b >= 0);
   const spawned = spawn(next);
-  return { state: spawned.state, events: [...events, ...spawned.events] };
+  const giftAppeared = !hadGift && queueGiftsOf(spawned.state).some((g) => g >= 0);
+  const boltAppeared = !hadBolt && queueBoltsOf(spawned.state).some((b) => b >= 0);
+  return {
+    state: spawned.state,
+    events: [
+      ...events,
+      ...(giftAppeared ? [{ type: 'gift' } as const] : []),
+      ...(boltAppeared ? [{ type: 'bolt' } as const] : []),
+      ...spawned.events,
+    ],
+  };
 }
 
 export function hardDrop(state: ClassicState): Step {
@@ -276,14 +412,31 @@ export function hardDrop(state: ClassicState): Step {
 export function hold(state: ClassicState): Step {
   if (state.over || !state.active || state.holdUsed) return { state, events: [] };
   const current = state.active.shape;
-  const step = spawn({ ...state, hold: current }, state.hold ?? undefined);
+  const currentGift = state.activeGift ?? NO_GIFT;
+  const currentBolt = state.activeBolt ?? NO_GIFT;
+  const step = spawn(
+    { ...state, hold: current, holdGift: currentGift, holdBolt: currentBolt },
+    state.hold ?? undefined,
+    state.hold ? (state.holdGift ?? NO_GIFT) : NO_GIFT,
+    state.hold ? (state.holdBolt ?? NO_GIFT) : NO_GIFT,
+  );
   return { state: { ...step.state, holdUsed: true }, events: step.events };
+}
+
+export function rushSpeed(rushMs: number): number {
+  if (rushMs <= 0) return 1;
+  const { peakSpeed, rampInMs, rampOutMs, durationMs } = cfg.bolt;
+  const elapsed = durationMs - rushMs;
+  const k = Math.min(1, elapsed / rampInMs, rushMs / rampOutMs);
+  return 1 + (peakSpeed - 1) * Math.max(0, k);
 }
 
 export function tick(state: ClassicState, dtMs: number, softDrop: boolean): Step {
   if (state.over || !state.active) return { state, events: [] };
-  const interval = softDrop ? Math.min(cfg.softDropMs, gravityMs(state.level)) : gravityMs(state.level);
-  let next = state;
+  const rushMs = state.rushMs ?? 0;
+  const gravity = Math.max(1, Math.round(gravityMs(state.level) / rushSpeed(rushMs)));
+  const interval = softDrop ? Math.min(cfg.softDropMs, gravity) : gravity;
+  let next: ClassicState = rushMs > 0 ? { ...state, rushMs: Math.max(0, rushMs - dtMs) } : state;
   let fallMs = state.fallMs + dtMs;
   let active = state.active;
   let score = state.score;

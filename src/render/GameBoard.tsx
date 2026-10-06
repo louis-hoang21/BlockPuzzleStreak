@@ -1,4 +1,17 @@
-import { BlurMask, Canvas, createPicture, Group, Picture, RoundedRect, Skia } from '@shopify/react-native-skia';
+import {
+  BlurMask,
+  Canvas,
+  ClipOp,
+  createPicture,
+  Group,
+  PaintStyle,
+  Picture,
+  RoundedRect,
+  Skia,
+  StrokeCap,
+  TileMode,
+  vec,
+} from '@shopify/react-native-skia';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import {
@@ -20,6 +33,9 @@ import { shapeSize, type Shape } from '../core/pieces';
 import { mulberry32 } from '../core/rng';
 import { Block, PieceBlocks } from './Block';
 import { EmptyCell } from './EmptyCell';
+import { GiftBow } from './GiftBow';
+import { BoardFrame } from './BoardFrame';
+import { RainbowWarmup } from './RainbowWarmup';
 import { drawRainbowBoxes, RAINBOW_MS, type Box } from './rainbow';
 import { slotCenter, type BoardLayout } from './layout';
 import type { BoardTheme, Skin } from './theme';
@@ -28,6 +44,11 @@ export interface ClearingCell {
   row: number;
   col: number;
   color: number;
+}
+
+export interface StormWave {
+  id: number;
+  before: Board;
 }
 
 export interface ClearEvent {
@@ -54,6 +75,8 @@ interface Props {
   board: Board;
   tray: readonly (Piece | null)[];
   clearing: ClearEvent | null;
+  storm: StormWave | null;
+  gift?: number;
   disabled: boolean;
   onDrop: (slot: number, row: number, col: number) => boolean;
   onRotate: (slot: number) => boolean;
@@ -117,6 +140,18 @@ const POP_DOWN_MS = 110;
 const LIFT_SPRING = { damping: 18, stiffness: 520, mass: 0.6 };
 const BACK_SPRING = { damping: 16, stiffness: 280, mass: 0.7 };
 const FLASH_COLOR = '#FFE680';
+const GUST_MS = 350;
+const WAVE_MS = 1100;
+const STORM_MS = GUST_MS + WAVE_MS;
+const GUST_DARK = 0.38;
+const GUST_STREAKS = 9;
+const STORM_SKY = '#1E2A44';
+const WAVE_BAND = 0.45;
+const WAVE_CRESTS = 3;
+const WAVE_DEEP = '#2E8BD8';
+const WAVE_LIGHT = '#8FD3FF';
+const FOAM = '#FFFFFF';
+const GIFT_TWINKLE_MS = 600;
 
 function JackpotBurst({
   clearing,
@@ -413,7 +448,20 @@ function PlacedPop({
   );
 }
 
-function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRotate, hintSlots, theme, skin }: Props) {
+function GameBoardView({
+  layout,
+  board,
+  tray,
+  clearing,
+  storm,
+  gift,
+  disabled,
+  onDrop,
+  onRotate,
+  hintSlots,
+  theme,
+  skin,
+}: Props) {
   const { cell, boardX, boardY, boardSize, framePad, trayX, trayY, trayWidth, trayHeight, trayCell, slotWidth, liftGap } =
     layout;
   const n = board.size;
@@ -427,6 +475,13 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
   const boardCells = useSharedValue<number[]>([]);
   const dragShape = useSharedValue<Shape>([]);
   const rainbow = useSharedValue(0);
+  const twinkle = useSharedValue(1);
+  const hasGift = gift !== undefined && board.cells[gift] !== 0;
+  useEffect(() => {
+    if (!hasGift) return;
+    twinkle.value = withRepeat(withSequence(withTiming(0.25, { duration: GIFT_TWINKLE_MS }), withTiming(1, { duration: GIFT_TWINKLE_MS })), -1);
+    return () => cancelAnimation(twinkle);
+  }, [hasGift, twinkle]);
   const pressSlot = useSharedValue(-1);
   const activeSlot = useSharedValue(-1);
   const landing = useSharedValue(0);
@@ -452,6 +507,129 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
   useEffect(() => {
     boardCells.value = board.cells.slice();
   }, [board, boardCells]);
+
+  const stormT = useSharedValue(1);
+  useEffect(() => {
+    if (storm === null) return;
+    stormT.value = 0;
+    stormT.value = withTiming(1, { duration: STORM_MS, easing: Easing.linear });
+  }, [storm, stormT]);
+  const waveOf = (t: number) => {
+    'worklet';
+    const x = Math.min(1, Math.max(0, (t * STORM_MS - GUST_MS) / WAVE_MS));
+    return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+  };
+  const stormLead = (t: number) => {
+    'worklet';
+    const band = boardSize * WAVE_BAND;
+    return boardX - framePad + t * (boardSize + band + framePad * 2);
+  };
+  const oldClip = useDerivedValue(() => {
+    const lead = stormT.value >= 1 ? boardX + boardSize + framePad : stormLead(waveOf(stormT.value));
+    return Skia.XYWHRect(lead, boardY - framePad, Math.max(0, boardX + boardSize + framePad - lead), boardSize + framePad * 2);
+  });
+  const wave = useDerivedValue(() => {
+    const raw = stormT.value;
+    const t = waveOf(raw);
+    return createPicture((canvas) => {
+      if (raw >= 1) return;
+      const ms = raw * STORM_MS;
+      const gust = ms < GUST_MS ? ms / GUST_MS : Math.max(0, 1 - (ms - GUST_MS) / (WAVE_MS * 0.6));
+      const areaX = boardX - framePad / 2;
+      const areaY = boardY - framePad / 2;
+      const areaS = boardSize + framePad;
+      canvas.save();
+      canvas.clipRRect(Skia.RRectXY(Skia.XYWHRect(areaX, areaY, areaS, areaS), framePad * 1.5, framePad * 1.5), ClipOp.Intersect, true);
+      if (gust > 0) {
+        const sky = Skia.Paint();
+        sky.setColor(Skia.Color(STORM_SKY));
+        sky.setAlphaf(GUST_DARK * gust);
+        canvas.drawRect(Skia.XYWHRect(areaX, areaY, areaS, areaS), sky);
+        const wind = Skia.Paint();
+        wind.setColor(Skia.Color(FOAM));
+        wind.setStyle(PaintStyle.Stroke);
+        wind.setStrokeCap(StrokeCap.Round);
+        wind.setStrokeWidth(cell * 0.06);
+        const travel = ms / STORM_MS;
+        for (let i = 0; i < GUST_STREAKS; i++) {
+          const len = cell * (1.2 + ((i * 53) % 7) * 0.25);
+          const y0 = areaY + (areaS * ((i * 37) % GUST_STREAKS + 0.5)) / GUST_STREAKS;
+          const x0 = areaX - len + ((travel * 2.4 + (i * 0.29) % 1) % 1) * (areaS + len * 2);
+          wind.setAlphaf(0.55 * gust);
+          canvas.drawLine(x0, y0, x0 + len, y0 - len * 0.25, wind);
+        }
+      }
+      canvas.restore();
+      if (ms < GUST_MS) return;
+      const band = boardSize * WAVE_BAND;
+      const lead = stormLead(t);
+      const top = boardY - framePad / 2;
+      const bottom = boardY + boardSize + framePad / 2;
+      const h = bottom - top;
+      const amp = cell * 0.45;
+      const phase = t * Math.PI * 4;
+      const edge = (y: number) => lead + Math.sin(((y - top) / h) * Math.PI * 2 * WAVE_CRESTS + phase) * amp;
+      const body = Skia.PathBuilder.Make().moveTo(lead - band, top);
+      const steps = 24;
+      for (let i = 0; i <= steps; i++) {
+        const y = top + (h * i) / steps;
+        body.lineTo(edge(y), y);
+      }
+      body.lineTo(lead - band, bottom).close();
+      const fade = t > 0.85 ? (1 - t) / 0.15 : 1;
+      const fill = Skia.Paint();
+      fill.setShader(
+        Skia.Shader.MakeLinearGradient(
+          vec(lead - band, 0),
+          vec(lead + amp, 0),
+          [Skia.Color('rgba(143,211,255,0)'), Skia.Color(WAVE_LIGHT), Skia.Color(WAVE_DEEP)],
+          [0, 0.55, 1],
+          TileMode.Clamp,
+        ),
+      );
+      fill.setAlphaf(0.92 * fade);
+      canvas.save();
+      canvas.clipRRect(Skia.RRectXY(Skia.XYWHRect(boardX - framePad / 2, top, boardSize + framePad, h), framePad * 1.5, framePad * 1.5), ClipOp.Intersect, true);
+      canvas.drawPath(body.build(), fill);
+      const foam = Skia.PathBuilder.Make();
+      for (let i = 0; i <= steps; i++) {
+        const y = top + (h * i) / steps;
+        if (i === 0) foam.moveTo(edge(y), y);
+        else foam.lineTo(edge(y), y);
+      }
+      const stroke = Skia.Paint();
+      stroke.setColor(Skia.Color(FOAM));
+      stroke.setStyle(PaintStyle.Stroke);
+      stroke.setStrokeWidth(cell * 0.12);
+      stroke.setStrokeCap(StrokeCap.Round);
+      stroke.setAlphaf(0.9 * fade);
+      canvas.drawPath(foam.build(), stroke);
+      const dot = Skia.Paint();
+      dot.setColor(Skia.Color(FOAM));
+      for (let i = 0; i < 10; i++) {
+        const y = top + (h * (i + 0.5)) / 10;
+        const back = cell * (0.3 + ((i * 37) % 5) * 0.12);
+        dot.setAlphaf(0.7 * fade);
+        canvas.drawCircle(edge(y) - back, y, cell * (0.06 + (i % 3) * 0.03), dot);
+        dot.setAlphaf(0.8 * fade);
+        canvas.drawCircle(edge(y) + cell * (0.15 + (i % 4) * 0.1), y - cell * 0.2, cell * (0.04 + (i % 2) * 0.03), dot);
+      }
+      canvas.restore();
+    });
+  });
+  const oldCells = useMemo(() => {
+    if (!storm) return null;
+    const before = storm.before;
+    return before.cells.map((v, i) => {
+      const x = boardX + (i % n) * cell;
+      const y = boardY + Math.floor(i / n) * cell;
+      return v === 0 ? (
+        <EmptyCell key={i} x={x} y={y} size={cell} theme={theme} />
+      ) : (
+        <Block key={i} x={x} y={y} size={cell} color={v - 1} skin={skin} />
+      );
+    });
+  }, [storm, boardX, boardY, cell, n, theme, skin]);
 
   const [pop, setPop] = useState<Pop | null>(null);
   const clearPop = useCallback((id: number) => setPop((p) => (p?.id === id ? null : p)), []);
@@ -662,24 +840,15 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
   return (
     <GestureDetector gesture={gesture}>
       <Canvas style={{ width: layout.width, height: layout.height }}>
-        <RoundedRect
-          x={boardX - framePad}
-          y={boardY - framePad}
-          width={boardSize + framePad * 2}
-          height={boardSize + framePad * 2}
-          r={framePad * 2}
-          color={theme.boardFrame}
-        />
-        <RoundedRect
-          x={boardX - framePad / 2}
-          y={boardY - framePad / 2}
-          width={boardSize + framePad}
-          height={boardSize + framePad}
-          r={framePad * 1.5}
-          color={theme.boardBg}
-        />
+        <RainbowWarmup x={boardX} y={boardY} w={boardSize} h={boardSize} cell={cell} pad={framePad} />
+        <BoardFrame x={boardX} y={boardY} width={boardSize} height={boardSize} pad={framePad} theme={theme} />
         {cells}
-        {pop && <PlacedPop key={pop.id} pop={pop} board={board} layout={layout} skin={skin} onDone={clearPop} />}
+        {hasGift && (
+          <GiftBow x={boardX + (gift % n) * cell} y={boardY + Math.floor(gift / n) * cell} size={cell} twinkle={twinkle} />
+        )}
+        {oldCells && <Group clip={oldClip}>{oldCells}</Group>}
+        <Picture picture={wave} />
+        {pop && <PlacedPop key={`pop-${pop.id}`} pop={pop} board={board} layout={layout} skin={skin} onDone={clearPop} />}
 
         <Picture picture={highlight} />
         {tray.map((piece, slot) =>
@@ -701,7 +870,7 @@ function GameBoardView({ layout, board, tray, clearing, disabled, onDrop, onRota
 
         {clearing && (
           <JackpotBurst
-            key={clearing.id}
+            key={`burst-${clearing.id}`}
             clearing={clearing}
             skin={skin}
             cell={cell}

@@ -1,20 +1,21 @@
 {
   "themes": [
-    { "id": "theme-1", "unlock": { "type": "default" } },
+    { "id": "theme-6", "unlock": { "type": "default" } },
+    { "id": "theme-1", "unlock": { "type": "free" } },
     { "id": "theme-2", "unlock": { "type": "score", "score": 5000 } },
     { "id": "theme-3", "unlock": { "type": "perfectClear", "count": 1 } },
     { "id": "theme-4", "unlock": { "type": "perfectClear", "count": 2 } },
     { "id": "theme-5", "unlock": { "type": "score", "score": 50000 } }
   ],
   "skins": [
-    { "id": "skin-1", "unlock": { "type": "default" } },
+    { "id": "skin-9", "unlock": { "type": "default" } },
+    { "id": "skin-1", "unlock": { "type": "free" } },
     { "id": "skin-2", "unlock": { "type": "score", "score": 10000 } },
     { "id": "skin-3", "unlock": { "type": "score", "score": 25000 } },
     { "id": "skin-4", "unlock": { "type": "combo", "multiplier": 3 } },
     { "id": "skin-5", "unlock": { "type": "combo", "multiplier": 5 } },
     { "id": "skin-6", "unlock": { "type": "score", "score": 40000 } },
     { "id": "skin-7", "unlock": { "type": "score", "score": 75000 } },
-    { "id": "skin-8", "unlock": { "type": "combo", "multiplier": 4 } },
-    { "id": "skin-9", "unlock": { "type": "score", "score": 15000 } }
+    { "id": "skin-8", "unlock": { "type": "combo", "multiplier": 4 } }
   ]
 }

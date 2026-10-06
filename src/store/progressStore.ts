@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { SKIN_IDS, skinsForCombo, THEME_IDS, themeForPerfectClear } from '../core/cosmetics';
 import { scoreUnlocksReached } from '../core/milestones';
 import { loadDeviceProgress, saveDeviceProgress, type DeviceProgress } from '../persistence/deviceProgress';
+import { t } from '../i18n';
 import { skinName, themeName } from '../render/theme';
 import { useNoticeStore, type ApplyPatch, type RewardKind } from './noticeStore';
 
@@ -11,6 +12,8 @@ interface ProgressStore extends DeviceProgress {
   onPerfectClear: () => void;
   onCombo: (combo: number) => void;
   unlockAll: () => number;
+  enableTester: () => void;
+  setTester: (on: boolean) => void;
 }
 
 const notify = (text: string, reward?: RewardKind, apply?: ApplyPatch) =>
@@ -20,8 +23,8 @@ const fmt = (n: number) => n.toLocaleString();
 
 export const useProgressStore = create<ProgressStore>()((set, get) => {
   const save = (patch: Partial<DeviceProgress>) => {
-    const { unlockedThemes, unlockedSkins, giftRedeemed } = get();
-    const next: DeviceProgress = { unlockedThemes, unlockedSkins, giftRedeemed, ...patch };
+    const { unlockedThemes, unlockedSkins, giftRedeemed, tester, testerRedeemed } = get();
+    const next: DeviceProgress = { unlockedThemes, unlockedSkins, giftRedeemed, tester, testerRedeemed, ...patch };
     saveDeviceProgress(next);
     set(next);
   };
@@ -36,14 +39,25 @@ export const useProgressStore = create<ProgressStore>()((set, get) => {
           continue;
         }
         save({ unlockedSkins: [...get().unlockedSkins, u.id] });
-        notify(`Đạt ${fmt(u.score)} điểm! Mở khoá skin ${skinName(u.id)}`, u.kind, { skin: u.id });
+        notify(
+          t(
+            `${fmt(u.score)} points! Unlocked skin ${t(skinName(u.id))}`,
+            `Đạt ${fmt(u.score)} điểm! Mở khoá skin ${t(skinName(u.id))}`,
+          ),
+          u.kind,
+          { skin: u.id },
+        );
       }
     },
     onPerfectClear: () => {
       const theme = themeForPerfectClear(get().unlockedThemes);
       if (!theme) return;
       save({ unlockedThemes: [...get().unlockedThemes, theme] });
-      notify(`Perfect Clear! Mở khoá theme ${themeName(theme)}`, 'theme', { theme });
+      notify(
+        t(`Perfect Clear! Unlocked theme ${t(themeName(theme))}`, `Perfect Clear! Mở khoá theme ${t(themeName(theme))}`),
+        'theme',
+        { theme },
+      );
     },
     unlockAll: () => {
       const { unlockedThemes, unlockedSkins } = get();
@@ -53,11 +67,24 @@ export const useProgressStore = create<ProgressStore>()((set, get) => {
       save({ unlockedThemes: [...THEME_IDS], unlockedSkins: [...SKIN_IDS], giftRedeemed: true });
       return opened;
     },
+    enableTester: () => {
+      save({
+        unlockedThemes: [...THEME_IDS],
+        unlockedSkins: [...SKIN_IDS],
+        giftRedeemed: true,
+        tester: true,
+        testerRedeemed: true,
+      });
+    },
+    setTester: (on) => {
+      if (get().testerRedeemed) save({ tester: on });
+    },
     onCombo: (combo) => {
       const skins = skinsForCombo(get().unlockedSkins, combo);
       if (skins.length === 0) return;
       save({ unlockedSkins: [...get().unlockedSkins, ...skins] });
-      notify(`Combo x${combo}! Mở khoá skin ${skins.map(skinName).join(', ')}`, 'skin', {
+      const names = skins.map(skinName).join(', ');
+      notify(t(`Combo x${combo}! Unlocked skin ${names}`, `Combo x${combo}! Mở khoá skin ${names}`), 'skin', {
         skin: skins[skins.length - 1],
       });
     },
@@ -65,3 +92,4 @@ export const useProgressStore = create<ProgressStore>()((set, get) => {
 });
 
 export const hasGiftPass = () => useProgressStore.getState().giftRedeemed;
+export const isTester = () => useProgressStore.getState().tester === true;

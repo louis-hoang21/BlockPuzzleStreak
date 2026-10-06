@@ -10,15 +10,17 @@ export interface ModeButtonColors {
 export const MODE_BUTTON_COLORS = {
   green: { face: '#45C93A', shade: '#1F7A1A', gloss: 'rgba(255,255,255,0.28)' },
   blue: { face: '#2F8BFF', shade: '#1A4FAE', gloss: 'rgba(255,255,255,0.28)' },
+  orange: { face: '#FF9A2E', shade: '#B4590C', gloss: 'rgba(255,255,255,0.28)' },
 } satisfies Record<string, ModeButtonColors>;
 
 interface Props {
   label: string;
   colors: ModeButtonColors;
   onPress: () => void;
+  chevron?: boolean;
 }
 
-export function ModeButton({ label, colors, onPress }: Props) {
+export function ModeButton({ label, colors, onPress, chevron = true }: Props) {
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
       {({ pressed }) => (
@@ -28,7 +30,9 @@ export function ModeButton({ label, colors, onPress }: Props) {
             <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
               {label}
             </Text>
-            <SymbolView name="chevron.right" size={15} weight="heavy" tintColor="#FFFFFF" style={styles.chevron} />
+            {chevron && (
+              <SymbolView name="chevron.right" size={15} weight="heavy" tintColor="#FFFFFF" style={styles.chevron} />
+            )}
           </View>
         </View>
       )}

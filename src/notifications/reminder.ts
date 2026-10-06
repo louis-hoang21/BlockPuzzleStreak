@@ -1,16 +1,22 @@
 import * as Notifications from 'expo-notifications';
 
+import { t, useLangStore, type Localized } from '../i18n';
+import { useSettingsStore } from '../store/settingsStore';
+
 const DAYS_AHEAD = 7;
 
-const MESSAGES = [
-  'Chuỗi Nổ đang chờ bạn. Vào nổ vài hàng nhé!',
-  'Còn mốc điểm chưa mở khoá đấy. Thử phá kỷ lục hôm nay?',
-  'Một ván nhanh trước khi nghỉ ngơi?',
-  'Combo x3 mở skin mới. Bạn đạt được chưa?',
-  'Kỷ lục của bạn đang chờ bị phá!',
-  'Vài phút xếp khối cho đầu óc thư giãn.',
-  'Perfect Clear mở theme mới. Thử ngay!',
-  'Vào chan tiếp đi, bạn sợ à?',
+const MESSAGES: Localized[] = [
+  { en: 'Your blast streak is waiting. Come clear a few lines!', vi: 'Chuỗi Nổ đang chờ bạn. Vào nổ vài hàng nhé!' },
+  {
+    en: 'There are score milestones left to unlock. Beat your record today?',
+    vi: 'Còn mốc điểm chưa mở khoá đấy. Thử phá kỷ lục hôm nay?',
+  },
+  { en: 'One quick round before you rest?', vi: 'Một ván nhanh trước khi nghỉ ngơi?' },
+  { en: 'A x3 combo unlocks a new skin. Got it yet?', vi: 'Combo x3 mở skin mới. Bạn đạt được chưa?' },
+  { en: 'Your record is waiting to be broken!', vi: 'Kỷ lục của bạn đang chờ bị phá!' },
+  { en: 'A few minutes of stacking blocks to relax your mind.', vi: 'Vài phút xếp khối cho đầu óc thư giãn.' },
+  { en: 'Perfect Clear unlocks a new theme. Try it now!', vi: 'Perfect Clear mở theme mới. Thử ngay!' },
+  { en: 'Come back for another round, scared?', vi: 'Vào chan tiếp đi, bạn sợ à?' },
 ];
 
 export type ReminderPermission = 'granted' | 'denied' | 'blocked';
@@ -33,7 +39,7 @@ export async function scheduleReminders(hour: number, minute: number) {
   for (let i = 1; i <= DAYS_AHEAD; i++) {
     const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i, hour, minute);
     await Notifications.scheduleNotificationAsync({
-      content: { title: 'Block Puzzle: Streak', body: MESSAGES[date.getDate() % MESSAGES.length] },
+      content: { title: 'Toast Twister', body: t(MESSAGES[date.getDate() % MESSAGES.length]) },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },
     });
   }
@@ -42,3 +48,9 @@ export async function scheduleReminders(hour: number, minute: number) {
 export async function cancelReminders() {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
+
+useLangStore.subscribe((state, prev) => {
+  if (state.lang === prev.lang) return;
+  const { reminder, reminderHour, reminderMinute } = useSettingsStore.getState();
+  if (reminder) scheduleReminders(reminderHour, reminderMinute);
+});

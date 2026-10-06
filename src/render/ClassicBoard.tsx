@@ -23,14 +23,18 @@ import {
 } from 'react-native-reanimated';
 
 import cfg from '../../config/classic.json';
-import { ghostRow, pieceCells, type ClassicState, type ClearedCell } from '../core/classic/engine';
+import { ghostRow, pieceCells, type ClassicState, type ClearedCell, type GiftStorm } from '../core/classic/engine';
 import { shapeCells, shapeColor, type ClassicShape } from '../core/classic/shapes';
 import { normalize, shapeSize } from '../core/pieces';
 import { mulberry32 } from '../core/rng';
 import { Block, PieceBlocks } from './Block';
 import type { ClassicLayout } from './classicLayout';
 import { EmptyCell } from './EmptyCell';
+import { BoltMark } from './BoltMark';
+import { GiftBow } from './GiftBow';
 import { drawRainbowBoxes, RAINBOW_MS, type Box } from './rainbow';
+import { BoardFrame } from './BoardFrame';
+import { RainbowWarmup } from './RainbowWarmup';
 import type { BoardTheme, Skin } from './theme';
 
 export interface ClassicClear {
@@ -38,6 +42,7 @@ export interface ClassicClear {
   cells: ClearedCell[];
   rows: number[];
   lines: number;
+  storm?: GiftStorm;
 }
 
 interface Props {
@@ -73,6 +78,9 @@ function clearOpacityValue(p: number): number {
   return p < 0.35 ? 1 : 1 - (p - 0.35) / 0.65;
 }
 const FLASH_COLOR = '#FFE680';
+const STORM_COLOR = '#BFE3FF';
+const STORM_FLASH_MS = 650;
+const TWINKLE_MS = 600;
 const GHOST_INSET = 3;
 const GHOST_FILL = 0.1;
 const GHOST_STROKE = 0.55;
@@ -86,6 +94,9 @@ function MiniPiece({
   size,
   skin,
   opacity,
+  gift = -1,
+  bolt = -1,
+  twinkle,
 }: {
   shape: ClassicShape;
   x: number;
@@ -95,12 +106,27 @@ function MiniPiece({
   size: number;
   skin: Skin;
   opacity?: number;
+  gift?: number;
+  bolt?: number;
+  twinkle?: SharedValue<number>;
 }) {
   const cells = normalize(shapeCells(shape, 0));
   const { rows, cols } = shapeSize(cells);
+  const giftCell = gift >= 0 ? cells[gift] : undefined;
+  const boltCell = bolt >= 0 ? cells[bolt] : undefined;
   return (
     <Group transform={[{ translateX: x + (w - cols * size) / 2 }, { translateY: y + (h - rows * size) / 2 }]}>
       <PieceBlocks cells={cells} color={shapeColor(shape)} size={size} skin={skin} opacity={opacity} />
+      {giftCell && (
+        <Group opacity={opacity ?? 1}>
+          <GiftBow x={giftCell[1] * size} y={giftCell[0] * size} size={size} twinkle={twinkle} />
+        </Group>
+      )}
+      {boltCell && (
+        <Group opacity={opacity ?? 1}>
+          <BoltMark x={boltCell[1] * size} y={boltCell[0] * size} size={size} twinkle={twinkle} />
+        </Group>
+      )}
     </Group>
   );
 }
@@ -132,12 +158,19 @@ function ClassicBurst({
 }) {
   const clearProgress = useSharedValue(0);
   const frameFlash = useSharedValue(0);
+  const stormFlash = useSharedValue(0);
   useEffect(() => {
+    if (clearing.storm) {
+      stormFlash.value = withSequence(
+        withTiming(0.85, { duration: STORM_FLASH_MS * 0.2 }),
+        withTiming(0, { duration: STORM_FLASH_MS * 0.8, easing: Easing.out(Easing.cubic) }),
+      );
+    }
     clearProgress.value = withTiming(1, { duration: CLEAR_MS, easing: Easing.linear });
     if (clearing.lines >= 2) {
       frameFlash.value = withSequence(withTiming(1, { duration: 50 }), withTiming(0, { duration: 180 }));
     }
-  }, [clearing, clearProgress, frameFlash]);
+  }, [clearing, clearProgress, frameFlash, stormFlash]);
   const sparks = useMemo(() => {
     const rand = mulberry32(clearing.id * 2654435761);
     const unit = cell / 38;
@@ -224,6 +257,22 @@ function ClassicBurst({
         ))}
       </Group>
       <Picture picture={burst} />
+      {clearing.storm && (
+        <Group opacity={stormFlash}>
+          {clearing.storm.rows
+            .filter((r) => r >= hidden)
+            .map((r) => (
+              <RoundedRect key={`r${r}`} x={boardX} y={boardY + (r - hidden) * cell} width={boardW} height={cell} r={cell * 0.2} color={STORM_COLOR}>
+                <BlurMask blur={cell * 0.3} style="solid" />
+              </RoundedRect>
+            ))}
+          {clearing.storm.cols.map((c) => (
+            <RoundedRect key={`c${c}`} x={boardX + c * cell} y={boardY} width={cell} height={boardH} r={cell * 0.2} color={STORM_COLOR}>
+              <BlurMask blur={cell * 0.3} style="solid" />
+            </RoundedRect>
+          ))}
+        </Group>
+      )}
     </>
   );
 }
@@ -293,26 +342,31 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
     });
   });
 
+  const twinkle = useSharedValue(1);
+  useEffect(() => {
+    twinkle.value = withRepeat(withSequence(withTiming(0.25, { duration: TWINKLE_MS }), withTiming(1, { duration: TWINKLE_MS })), -1);
+  }, [twinkle]);
+  const giftIndex = state.gift ?? -1;
+  const boardGift =
+    giftIndex >= 0 && Math.floor(giftIndex / cols) >= hidden && state.cells[giftIndex] !== 0
+      ? { x: boardX + (giftIndex % cols) * cell, y: yOf(Math.floor(giftIndex / cols)) }
+      : null;
+  const activeGiftCell = active && (state.activeGift ?? -1) >= 0 ? activeCells[state.activeGift ?? 0] : undefined;
+  const queueGifts = state.queueGifts ?? [];
+  const boltIndex = state.bolt ?? -1;
+  const boardBolt =
+    boltIndex >= 0 && Math.floor(boltIndex / cols) >= hidden && state.cells[boltIndex] !== 0
+      ? { x: boardX + (boltIndex % cols) * cell, y: yOf(Math.floor(boltIndex / cols)) }
+      : null;
+  const activeBoltCell = active && (state.activeBolt ?? -1) >= 0 ? activeCells[state.activeBolt ?? 0] : undefined;
+  const queueBolts = state.queueBolts ?? [];
+
   const nextBoxH = sideCell * 2.6;
 
   return (
     <Canvas style={{ width: layout.width, height: layout.height }}>
-      <RoundedRect
-        x={boardX - framePad}
-        y={boardY - framePad}
-        width={boardW + framePad * 2}
-        height={boardH + framePad * 2}
-        r={framePad * 2}
-        color={theme.boardFrame}
-      />
-      <RoundedRect
-        x={boardX - framePad / 2}
-        y={boardY - framePad / 2}
-        width={boardW + framePad}
-        height={boardH + framePad}
-        r={framePad * 1.5}
-        color={theme.boardBg}
-      />
+      <RainbowWarmup x={boardX} y={boardY} w={boardW} h={boardH} cell={cell} pad={framePad} />
+      <BoardFrame x={boardX} y={boardY} width={boardW} height={boardH} pad={framePad} theme={theme} />
       {grid}
       <Group clip={rect(boardX, boardY, boardW, boardH)}>
         {ghostCells.map(([r, c]) => (
@@ -339,14 +393,22 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
             />
           </Group>
         ))}
+        {boardGift && <GiftBow x={boardGift.x} y={boardGift.y} size={cell} twinkle={twinkle} />}
+        {boardBolt && <BoltMark x={boardBolt.x} y={boardBolt.y} size={cell} twinkle={twinkle} />}
         {activeCells.map(([r, c]) => (
           <Block key={`a${r}-${c}`} x={boardX + c * cell} y={yOf(r)} size={cell} color={color} skin={skin} />
         ))}
+        {activeGiftCell && (
+          <GiftBow x={boardX + activeGiftCell[1] * cell} y={yOf(activeGiftCell[0])} size={cell} twinkle={twinkle} />
+        )}
+        {activeBoltCell && (
+          <BoltMark x={boardX + activeBoltCell[1] * cell} y={yOf(activeBoltCell[0])} size={cell} twinkle={twinkle} />
+        )}
         <Picture picture={glow} />
       </Group>
       {clearing && (
         <ClassicBurst
-          key={clearing.id}
+          key={`burst-${clearing.id}`}
           clearing={clearing}
           skin={skin}
           cell={cell}
@@ -380,6 +442,9 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
           size={sideCell}
           skin={skin}
           opacity={state.holdUsed ? 0.35 : 1}
+          gift={state.holdGift ?? -1}
+          bolt={state.holdBolt ?? -1}
+          twinkle={twinkle}
         />
       )}
       <RoundedRect
@@ -401,6 +466,9 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
           h={nextBoxH}
           size={sideCell}
           skin={skin}
+          gift={queueGifts[i] ?? -1}
+          bolt={queueBolts[i] ?? -1}
+          twinkle={twinkle}
         />
       ))}
     </Canvas>

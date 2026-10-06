@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Block Puzzle: Streak",
+    "name": "Toast Twister",
     "slug": "block-puzzle-streak",
     "scheme": "blockpuzzlestreak",
-    "version": "1.0.8",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,6 @@
       "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
-        "CFBundleDisplayName": "Block Streak",
         "CADisableMinimumFrameDurationOnPhone": true
       },
       "config": {
@@ -49,7 +48,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1B1F3B"
+      "backgroundColor": "#E9CDA4"
     },
     "plugins": [
       "./plugins/withoutPushEntitlement",

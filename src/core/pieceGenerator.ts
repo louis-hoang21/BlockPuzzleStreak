@@ -1,7 +1,7 @@
 import balance from '../../config/balance.json';
 import { boardBits, placeAndClear, placements as spotsFor } from './bitboard';
 import { canPlace, type Board } from './board';
-import { rotateTimes, shapeById, SHAPES, type Shape, type Tier } from './pieces';
+import { rotateTimes, sameShape, shapeById, SHAPES, type Shape, type Tier } from './pieces';
 import type { Rng } from './rng';
 
 export interface Piece {
@@ -20,11 +20,26 @@ function tierWeight(tier: Tier, t: number): number {
   return easy[tier] + (hard[tier] - easy[tier]) * t;
 }
 
+const SHAPE_SCALE: Record<string, number[] | undefined> = balance.shapeScale.shapes;
+
+function shapeScale(id: string, score: number): number {
+  const scale = SHAPE_SCALE[id];
+  if (!scale) return 1;
+  const at = balance.shapeScale.atScore;
+  if (score <= at[0]) return scale[0];
+  for (let i = 1; i < at.length; i++) {
+    if (score <= at[i]) return scale[i - 1] + ((scale[i] - scale[i - 1]) * (score - at[i - 1])) / (at[i] - at[i - 1]);
+  }
+  return scale[scale.length - 1];
+}
+
 export function randomPiece(rng: Rng, score: number): Piece {
   const t = difficultyAt(score);
   const tierTotals: Record<Tier, number> = { basic: 0, small: 0, medium: 0, large: 0, long: 0 };
   for (const s of SHAPES) tierTotals[s.tier] += s.weight ?? 1;
-  const weights = SHAPES.map((s) => (tierWeight(s.tier, t) * (s.weight ?? 1)) / tierTotals[s.tier]);
+  const weights = SHAPES.map(
+    (s) => ((tierWeight(s.tier, t) * (s.weight ?? 1)) / tierTotals[s.tier]) * shapeScale(s.id, score),
+  );
   const total = weights.reduce((a, b) => a + b, 0);
 
   let roll = rng() * total;
@@ -101,7 +116,7 @@ function toughSet(rng: Rng, board: Board, score: number): Piece[] | null {
 const DOT: Piece = { shapeId: SHAPES[0].id, color: 0, cells: SHAPES[0].cells };
 const SMALL_SUBS = ['bar2', 'corner2', 'diag2'].map(shapeById);
 
-function paintSet(rng: Rng, set: readonly Piece[], avoid: readonly number[]): Piece[] {
+export function paintSet(rng: Rng, set: readonly Piece[], avoid: readonly number[]): Piece[] {
   const used = new Set(avoid);
   return set.map((piece) => {
     const free = Array.from({ length: balance.pieceColors }, (_, c) => c).filter((c) => !used.has(c));
@@ -109,6 +124,137 @@ function paintSet(rng: Rng, set: readonly Piece[], avoid: readonly number[]): Pi
     used.add(color);
     return { ...piece, color };
   });
+}
+
+const CHAIN_BRANCH = 8;
+const CHAIN_ATTEMPTS = 24;
+const CHAIN_LOOKAHEAD = 2;
+
+const CHAIN_SHAPES: { id: string; cells: Shape; weight: number }[] = SHAPES.flatMap((def) => {
+  const out: { id: string; cells: Shape; weight: number }[] = [];
+  for (let turn = 0; turn < 4; turn++) {
+    const cells = rotateTimes(def.cells, turn);
+    if (!out.some((o) => sameShape(o.cells, cells))) {
+      out.push({ id: def.id, cells, weight: (def.weight ?? 1) * shapeScale(def.id, 0) * (1 + cells.length / 8) });
+    }
+  }
+  return out;
+});
+
+type Bits = { lo: number; hi: number };
+
+function clearingMoves(lo: number, hi: number, spots: readonly Bits[], n: number): Bits[] {
+  const out: Bits[] = [];
+  for (const spot of spots) {
+    if ((lo & spot.lo) !== 0 || (hi & spot.hi) !== 0) continue;
+    const next = placeAndClear(lo, hi, spot, n);
+    if (next.lo !== (lo | spot.lo) || next.hi !== (hi | spot.hi)) out.push(next);
+  }
+  return out;
+}
+
+const spotCache = new Map<number, Bits[][]>();
+
+function chainSpots(n: number): Bits[][] {
+  let spots = spotCache.get(n);
+  if (!spots) {
+    spots = CHAIN_SHAPES.map((s) => spotsFor(s.cells, n));
+    spotCache.set(n, spots);
+  }
+  return spots;
+}
+
+function chainSearch(rng: Rng, n: number) {
+  const spots = chainSpots(n);
+  const search = (lo: number, hi: number, left: number, weighted = true): number[] | null => {
+    if (left === 0) return [];
+    const options: { k: number; next: Bits; key: number }[] = [];
+    CHAIN_SHAPES.forEach((shape, k) => {
+      for (const next of clearingMoves(lo, hi, spots[k], n)) {
+        options.push({ k, next, key: weighted ? rng() ** (1 / shape.weight) : rng() });
+      }
+    });
+    options.sort((x, y) => y.key - x.key);
+    const tried = new Set<number>();
+    for (const { k, next } of options) {
+      if (tried.has(k)) continue;
+      tried.add(k);
+      if (tried.size > CHAIN_BRANCH) break;
+      const rest = search(next.lo, next.hi, left - 1, weighted);
+      if (rest) return [k, ...rest];
+    }
+    return null;
+  };
+  return { spots, search };
+}
+
+export function chainsAll(board: Board, trays: readonly (readonly Piece[])[]): boolean {
+  const n = board.size;
+  const options = trays.map((tray) => tray.map((p) => spotsFor(p.cells, n)));
+  let budget = balance.solvableSearchBudget;
+  const search = (lo: number, hi: number, t: number, left: number[]): boolean => {
+    if (left.length === 0) {
+      if (t + 1 >= trays.length) return true;
+      return search(
+        lo,
+        hi,
+        t + 1,
+        trays[t + 1].map((_, i) => i),
+      );
+    }
+    for (let i = 0; i < left.length; i++) {
+      const rest = left.filter((_, j) => j !== i);
+      for (const next of clearingMoves(lo, hi, options[t][left[i]], n)) {
+        if (--budget < 0) return false;
+        if (search(next.lo, next.hi, t, rest)) return true;
+      }
+    }
+    return false;
+  };
+  if (trays.length === 0) return true;
+  const start = boardBits(board);
+  return search(
+    start.lo,
+    start.hi,
+    0,
+    trays[0].map((_, i) => i),
+  );
+}
+
+export function chainSet(rng: Rng, board: Board, sets: number, avoid: readonly number[] = []): Piece[] | null {
+  const n = board.size;
+  const { spots, search } = chainSearch(rng, n);
+
+  const everyPathChains = (lo: number, hi: number, left: number[], after: number): boolean => {
+    if (left.length === 0) return search(lo, hi, after, false) !== null;
+    for (let i = 0; i < left.length; i++) {
+      const rest = left.filter((_, j) => j !== i);
+      for (const next of clearingMoves(lo, hi, spots[left[i]], n)) {
+        if (!everyPathChains(next.lo, next.hi, rest, after)) return false;
+      }
+    }
+    return true;
+  };
+
+  const start = boardBits(board);
+  const after = balance.traySize * (Math.min(sets, CHAIN_LOOKAHEAD) - 1);
+  let set: number[] | null = null;
+  for (let attempt = 0; attempt < (after > 0 ? CHAIN_ATTEMPTS : 1); attempt++) {
+    const plan = search(start.lo, start.hi, balance.traySize + after, attempt < CHAIN_ATTEMPTS / 2);
+    if (!plan) continue;
+    set = plan.slice(0, balance.traySize);
+    if (after === 0 || everyPathChains(start.lo, start.hi, set, after)) break;
+  }
+  for (let attempt = 0; !set && attempt < CHAIN_ATTEMPTS; attempt++) {
+    set = search(start.lo, start.hi, balance.traySize, attempt % 2 === 0);
+  }
+  if (!set) return null;
+  const shuffled = set.map((k) => ({ k, key: rng() })).sort((x, y) => x.key - y.key);
+  return paintSet(
+    rng,
+    shuffled.map(({ k }) => ({ shapeId: CHAIN_SHAPES[k].id, color: 0, cells: CHAIN_SHAPES[k].cells })),
+    avoid,
+  );
 }
 
 export function nextPieceSet(rng: Rng, board: Board, score: number, avoid: readonly number[] = []): Piece[] {

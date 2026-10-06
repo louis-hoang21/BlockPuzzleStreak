@@ -16,8 +16,9 @@ import { StatusBar } from 'expo-status-bar';
 
 import { comboSfx, initSfx, playSfx } from '../audio/sfx';
 import { markReviewPromptShown, requestStoreReview, reviewPromptDelay } from '../review/reviewPrompt';
-import { solidRect, type Board, type CellRect } from '../core/board';
-import { hasMove, rescueSlots, type PlaceResult } from '../core/game';
+import balance from '../../config/balance.json';
+import type { CellRect } from '../core/board';
+import { hasMove, rescueSlots, stormEnergy, type PlaceResult } from '../core/game';
 import { stageAt, stageColor } from '../core/stages';
 import {
   hapticCelebrate,
@@ -30,15 +31,17 @@ import {
 } from '../haptics';
 import { Fireworks } from '../render/Fireworks';
 import { ThemeBackdrop } from '../render/Backdrops';
-import { GameBoard, type ClearEvent, type ClearingCell } from '../render/GameBoard';
+import { GameBoard, type ClearEvent, type ClearingCell, type StormWave } from '../render/GameBoard';
 import { computeLayout, type BoardLayout } from '../render/layout';
 import { COLORS, hudColors, rotationBadgeColor, skinById, STAGE_LOOKS, themeById } from '../render/theme';
 import { useGameStore, type Mode } from '../store/gameStore';
 import { useNoticeStore, type Notice, type NoticeTone, type RewardKind } from '../store/noticeStore';
 import { useRecordsStore, type GameResult } from '../store/recordsStore';
 import { useSettingsStore } from '../store/settingsStore';
+import { t, useT } from '../i18n';
 import { gameOverLine, type LineTone } from './gameOverLines';
-import { Onboarding } from './Onboarding';
+import { Onboarding, TUTORIAL_VERSION } from './Onboarding';
+import { StormMeter } from './StormMeter';
 
 export interface Popup {
   id: number;
@@ -66,6 +69,9 @@ const SCORE_HOLD = 0.7;
 const BADGE_PULSE_MS = 3000;
 const BADGE_PULSES = 6;
 const STAGE_SFX_DELAY_MS = 350;
+const HEART_MULTIPLIER = balance.heart.multiplier;
+const STORM_SFX_DELAY_MS = 350;
+const STORM_COLOR = '#3FA9F5';
 const STAGE_FADE_MS = 700;
 const CARD_LOOK = {
   bg: '#5A2438',
@@ -80,14 +86,15 @@ const REWARD_ICONS = {
   rotation: {
     name: 'arrow.clockwise.circle.fill',
     color: '#3DCB4A',
-    title: 'Thêm lượt xoay!',
+    title: { en: 'More rotations!', vi: 'Thêm lượt xoay!' },
   },
   theme: { name: 'paintpalette.fill', color: '#4FC3F7' },
   skin: { name: 'sparkles', color: '#FF5FD2' },
-} as const satisfies Record<RewardKind, { name: SFSymbol; color: string; title?: string }>;
+} as const satisfies Record<RewardKind, { name: SFSymbol; color: string; title?: { en: string; vi: string } }>;
 const RECORD_FIREWORKS_GAP_MS = 1100;
 const RECORD_SFX_DELAY_MS = 500;
 export const COMBO_SFX_DELAY_MS = 120;
+const GIFT_SFX_DELAY_MS = 180;
 const COMBO_COLORS = ['#4FC3F7', '#7BD84F', '#FFD84D', '#FF8A1F', '#FF4D6D', '#FF5FD2'];
 
 function clearedCells(result: PlaceResult): ClearingCell[] {
@@ -97,7 +104,7 @@ function clearedCells(result: PlaceResult): ClearingCell[] {
   const out: ClearingCell[] = [];
   const add = (row: number, col: number) => {
     const i = row * n + col;
-    if (seen.has(i)) return;
+    if (seen.has(i) || placed.cells[i] === 0) return;
     seen.add(i);
     out.push({ row, col, color: placed.cells[i] - 1 });
   };
@@ -106,24 +113,16 @@ function clearedCells(result: PlaceResult): ClearingCell[] {
   return out;
 }
 
-const NICE_MIN_CELLS = 6;
-
-function niceRect(before: Board, result: PlaceResult): CellRect | null {
-  const rect = solidRect(result.state.board);
-  if (!rect || rect.rows < 2 || rect.cols < 2) return null;
-  const area = rect.rows * rect.cols;
-  const pieceCells = result.placed.cells.filter((v) => v !== 0).length - before.cells.filter((v) => v !== 0).length;
-  if (area < NICE_MIN_CELLS || area <= pieceCells) return null;
-  return solidRect(before) ? null : rect;
-}
-
 function popupLabel(result: PlaceResult): string | null {
   const { score } = result;
   if (score.perfectClearPoints > 0) return 'Amazing!';
+  if (score.heart) return t(`x${HEART_MULTIPLIER} points`, `x${HEART_MULTIPLIER} điểm`);
+  if (result.gift) return t('Gift blast!', 'Nổ quà!');
   return null;
 }
 
 export function GameScreen({ mode }: { mode: Mode }) {
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const { game, result } = useGameStore((s) => s.modes[mode]);
   const rotations = game.rotations;
@@ -135,10 +134,11 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const notice = useNoticeStore((s) => s.queue[0]);
   const theme = themeById(useSettingsStore((s) => s.theme));
   const skin = skinById(useSettingsStore((s) => s.skin));
-  const onboarded = useSettingsStore((s) => s.onboarded);
+  const onboarded = useSettingsStore((s) => s.onboarded && s.tutorialVersion >= TUTORIAL_VERSION);
 
   const [layout, setLayout] = useState<BoardLayout | null>(null);
   const [clearing, setClearing] = useState<ClearEvent | null>(null);
+  const [storm, setStorm] = useState<StormWave | null>(null);
   const [popup, setPopup] = useState<Popup | null>(null);
   const [comboEvent, setComboEvent] = useState<ComboEvent | null>(null);
   const [multiLines, setMultiLines] = useState<{
@@ -163,20 +163,21 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const over = useGameOverFlow(game.over, result);
   const giveUpIn = useGameStore((s) => s.giveUp);
   const stuck = !game.over && !hasMove(game.board, game.tray);
-  const [offer, setOffer] = useState(false);
+  const [offer, setOffer] = useState<'rotate' | 'storm' | null>(null);
   const [rescuing, setRescuing] = useState(false);
   if (!stuck && (offer || rescuing)) {
-    setOffer(false);
+    setOffer(null);
     setRescuing(false);
   }
+  const canRotate = useMemo(() => stuck && rescueSlots(game).length > 0, [stuck, game]);
   useEffect(() => {
     if (!stuck || rescuing) return;
     const t = setTimeout(() => {
       hapticWarning();
-      setOffer(true);
+      setOffer(canRotate ? 'rotate' : 'storm');
     }, GAME_OVER_DELAY_MS);
     return () => clearTimeout(t);
-  }, [stuck, rescuing]);
+  }, [stuck, rescuing, canRotate]);
   const hintSlots = useMemo(() => (rescuing && stuck ? rescueSlots(game) : NO_SLOTS), [rescuing, stuck, game]);
 
   useEffect(() => {
@@ -200,6 +201,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
   const hud = hudColors(stageLook?.tone ?? theme.tone);
 
   const losses = useRecordsStore((s) => s.byMode[mode].gamesBelowBest);
+  const meter = stormEnergy(game);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -208,11 +210,11 @@ export function GameScreen({ mode }: { mode: Mode }) {
 
   const onDrop = useCallback(
     (slot: number, row: number, col: number) => {
-      const before = useGameStore.getState().modes[mode].game.board;
       const result = placeIn(mode, slot, row, col);
       if (!result) return false;
       const id = ++eventId.current;
       const { lines, combo, perfectClearPoints, total } = result.score;
+      if (lines > 0 || result.heart) setPopup({ id, points: total, label: popupLabel(result) });
       if (lines > 0) {
         setClearing({
           id,
@@ -221,7 +223,6 @@ export function GameScreen({ mode }: { mode: Mode }) {
           cols: result.cleared.cols,
           lines,
         });
-        setPopup({ id, points: total, label: popupLabel(result) });
         if (combo >= 2) setComboEvent({ id, combo });
         if (lines >= 2) setMultiLines({ id, lines });
         if (lines >= 3) {
@@ -257,7 +258,23 @@ export function GameScreen({ mode }: { mode: Mode }) {
           ),
         );
       }
-      const nice = niceRect(before, result);
+      if (result.gift) {
+        const a = 12;
+        shakeX.set(
+          withSequence(
+            withTiming(a, { duration: 40 }),
+            withTiming(-a, { duration: 60 }),
+            withTiming(a * 0.6, { duration: 60 }),
+            withTiming(-a * 0.6, { duration: 60 }),
+            withTiming(0, { duration: 60 }),
+          ),
+        );
+        setTimeout(() => {
+          hapticCelebrate();
+          playSfx('rotate');
+        }, GIFT_SFX_DELAY_MS);
+      }
+      const nice = result.heart;
       if (nice) setNiceEvent({ id, rect: nice });
       if (passedRecord) {
         setRecordEvent(id);
@@ -321,7 +338,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
     (slot: number) => {
       if (useGameStore.getState().modes[mode].game.rotations <= 0) {
         hapticWarning();
-        useNoticeStore.getState().push('Hết lượt xoay', undefined, undefined, 'error');
+        useNoticeStore.getState().push(t('No rotations left', 'Hết lượt xoay'), undefined, undefined, 'error');
         return false;
       }
       if (!rotateIn(mode, slot)) return false;
@@ -332,20 +349,54 @@ export function GameScreen({ mode }: { mode: Mode }) {
     [mode, rotateIn],
   );
 
+  const callStorm = () => {
+    const result = useGameStore.getState().storm(mode);
+    if (!result) return;
+    setOffer(null);
+    setRescuing(false);
+    setClearing(null);
+    setStorm({ id: ++eventId.current, before: result.before });
+    const g = 6;
+    shakeX.set(
+      withSequence(
+        withTiming(g, { duration: 50 }),
+        withTiming(-g, { duration: 70 }),
+        withTiming(g * 0.6, { duration: 70 }),
+        withTiming(-g * 0.6, { duration: 70 }),
+        withTiming(0, { duration: 60 }),
+      ),
+    );
+    hapticTap();
+    setTimeout(() => {
+      hapticCelebrate();
+      playSfx('rotate');
+    }, STORM_SFX_DELAY_MS);
+  };
+
   const acceptRotate = () => {
     hapticTap();
-    setOffer(false);
+    setOffer(null);
     setRescuing(true);
     const beat = BADGE_PULSE_MS / BADGE_PULSES / 2;
     badgePulse.set(
       withRepeat(withSequence(withTiming(1.25, { duration: beat }), withTiming(1, { duration: beat })), BADGE_PULSES),
     );
-    useNoticeStore.getState().push('Chạm vào khối đang nhấp nhô để xoay');
+    useNoticeStore.getState().push(t('Tap the bouncing block to rotate it', 'Chạm vào khối đang nhấp nhô để xoay'));
   };
 
   const declineRotate = () => {
     hapticTap();
-    setOffer(false);
+    if (meter.ready) {
+      setOffer('storm');
+      return;
+    }
+    setOffer(null);
+    giveUpIn(mode);
+  };
+
+  const declineStorm = () => {
+    hapticTap();
+    setOffer(null);
     giveUpIn(mode);
   };
 
@@ -409,12 +460,25 @@ export function GameScreen({ mode }: { mode: Mode }) {
             onPress={() => {
               hapticTap();
               const notices = useNoticeStore.getState();
-              if (rotations > 0) notices.push(`Chạm vào khối trong khay để xoay (còn ${rotations} lượt)`);
-              else notices.push('Hết lượt xoay. Vượt mốc điểm để nhận thêm', undefined, undefined, 'error');
+              if (rotations > 0) {
+                notices.push(
+                  tr(
+                    `Tap a block in the tray to rotate it (${rotations} left)`,
+                    `Chạm vào khối trong khay để xoay (còn ${rotations} lượt)`,
+                  ),
+                );
+              } else {
+                notices.push(
+                  tr('No rotations left. Hit score milestones to earn more', 'Hết lượt xoay. Vượt mốc điểm để nhận thêm'),
+                  undefined,
+                  undefined,
+                  'error',
+                );
+              }
             }}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`${rotations} lượt xoay`}
+            accessibilityLabel={tr(`${rotations} rotations`, `${rotations} lượt xoay`)}
             style={({ pressed }) => [
               styles.rotations,
               { backgroundColor: rotationBadgeColor(theme) },
@@ -452,7 +516,9 @@ export function GameScreen({ mode }: { mode: Mode }) {
               board={game.board}
               tray={game.tray}
               clearing={clearing}
-              disabled={game.over || !onboarded || offer}
+              storm={storm}
+              gift={game.gift}
+              disabled={game.over || !onboarded || offer !== null}
               onDrop={onDrop}
               onRotate={onRotate}
               hintSlots={hintSlots}
@@ -460,6 +526,22 @@ export function GameScreen({ mode }: { mode: Mode }) {
               skin={skin}
             />
           </Animated.View>
+        )}
+        {layout && (
+          <StormMeter
+            x={layout.trayX}
+            y={layout.meterY}
+            width={layout.trayWidth}
+            height={layout.meterHeight}
+            energy={meter.energy}
+            need={meter.need}
+            ready={meter.ready}
+            done={meter.done}
+            disabled={game.over || !onboarded || offer === 'rotate'}
+            onPress={callStorm}
+            tone={stageLook?.tone ?? theme.tone}
+            textColor={hud.text}
+          />
         )}
         {layout && fireworks !== null && <Fireworks id={fireworks} width={layout.width} height={layout.height} />}
         {layout && notice?.reward && notice.reward !== 'rotation' && !notice.apply && (
@@ -500,7 +582,10 @@ export function GameScreen({ mode }: { mode: Mode }) {
         )}
       </View>
 
-      {offer && stuck && !rescuing && <RotateOffer rotations={rotations} onUse={acceptRotate} onSkip={declineRotate} />}
+      {offer === 'rotate' && stuck && !rescuing && (
+        <RotateOffer rotations={rotations} onUse={acceptRotate} onSkip={declineRotate} />
+      )}
+      {offer === 'storm' && stuck && meter.ready && <StormOffer onUse={callStorm} onSkip={declineStorm} />}
 
       {over.showGameOver && (
         <GameOverOverlay
@@ -509,12 +594,12 @@ export function GameScreen({ mode }: { mode: Mode }) {
           result={result}
           losses={losses}
           stats={[
-            { label: 'Hàng nổ', value: game.stats.linesCleared },
+            { label: tr('Lines cleared', 'Hàng nổ'), value: game.stats.linesCleared },
             {
-              label: 'Combo cao nhất',
+              label: tr('Best combo', 'Combo cao nhất'),
               value: game.stats.maxCombo > 0 ? `x${game.stats.maxCombo}` : '–',
             },
-            { label: 'Lượt đặt', value: game.stats.placements },
+            { label: tr('Blocks placed', 'Lượt đặt'), value: game.stats.placements },
           ]}
           recordFireworks={over.recordFireworks}
           showReview={over.showReview}
@@ -523,9 +608,9 @@ export function GameScreen({ mode }: { mode: Mode }) {
         />
       )}
 
-      {notice?.apply && <ApplyPrompt key={notice.id} notice={notice} />}
+      {notice?.apply && <ApplyPrompt key={`apply-${notice.id}`} notice={notice} />}
 
-      {!onboarded && <Onboarding onDone={() => useSettingsStore.getState().update({ onboarded: true })} />}
+      {!onboarded && <Onboarding onDone={() => useSettingsStore.getState().update({ onboarded: true, tutorialVersion: TUTORIAL_VERSION })} />}
     </View>
   );
 }
@@ -594,6 +679,7 @@ export function GameOverOverlay({
   onCloseReview: () => void;
   onRestart: () => void;
 }) {
+  const tr = useT();
   const screen = useWindowDimensions();
   const overLine = useMemo(
     () => (result ? gameOverLine(score, best, result.newBest, losses) : null),
@@ -604,12 +690,12 @@ export function GameOverOverlay({
     <>
       <View style={styles.overlay}>
         <View style={[styles.card, { backgroundColor: CARD_LOOK.bg }]}>
-          <Text style={styles.cardTitle}>Hết chiêuuuu</Text>
+          <Text style={styles.cardTitle}>{tr('Out of moves!', 'Hết chiêuuuu')}</Text>
           {result?.newBest && <NewBestBadge />}
           <Text style={styles.cardScore} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
             {score.toLocaleString()}
           </Text>
-          <Text style={styles.cardSub}>Kỷ lục: {best.toLocaleString()}</Text>
+          <Text style={styles.cardSub}>{tr('Best', 'Kỷ lục')}: {best.toLocaleString()}</Text>
           {overLine && (
             <View style={styles.overLineBox}>
               <SymbolView
@@ -618,7 +704,7 @@ export function GameOverOverlay({
                 tintColor={LINE_ICONS[overLine.tone].color}
                 style={styles.overLineIcon}
               />
-              <Text style={styles.overLine}>{overLine.text}</Text>
+              <Text style={styles.overLine}>{tr(overLine.text)}</Text>
             </View>
           )}
           <View style={styles.statsRow}>
@@ -628,10 +714,10 @@ export function GameOverOverlay({
           </View>
           <View style={styles.buttonRow}>
             <Pressable style={styles.secondaryButton} onPress={() => router.back()}>
-              <Text style={styles.secondaryText}>Về menu</Text>
+              <Text style={styles.secondaryText}>{tr('Menu', 'Về menu')}</Text>
             </Pressable>
             <Pressable style={[styles.primaryButton, { backgroundColor: CARD_LOOK.button }]} onPress={onRestart}>
-              <Text style={[styles.primaryText, { color: CARD_LOOK.buttonText }]}>Chơi lại</Text>
+              <Text style={[styles.primaryText, { color: CARD_LOOK.buttonText }]}>{tr('Play again', 'Chơi lại')}</Text>
             </Pressable>
           </View>
         </View>
@@ -654,21 +740,48 @@ export function GameOverOverlay({
   );
 }
 
+function StormOffer({ onUse, onSkip }: { onUse: () => void; onSkip: () => void }) {
+  const tr = useT();
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
+      <View style={[styles.rewardCard, { borderColor: STORM_COLOR }]}>
+        <SymbolView name="tornado" size={36} tintColor={STORM_COLOR} style={styles.rewardIcon} />
+        <Text style={styles.rewardTitle}>{tr('Out of space!', 'Hết chỗ rồi!')}</Text>
+        <Text style={styles.rewardText}>{tr('Your storm meter is full', 'Thanh bão của bạn đang đầy')}</Text>
+        <Text style={styles.applyQuestion}>
+          {tr('Call a storm to sweep or reshuffle the board?', 'Gọi bão để quét sạch hoặc xáo lại bàn nhé?')}
+        </Text>
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={onSkip}>
+            <Text style={styles.secondaryText}>{tr('No thanks', 'Không cần')}</Text>
+          </Pressable>
+          <Pressable style={styles.primaryButton} onPress={onUse}>
+            <Text style={styles.primaryText}>{tr('Call storm', 'Gọi bão')}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 function RotateOffer({ rotations, onUse, onSkip }: { rotations: number; onUse: () => void; onSkip: () => void }) {
+  const tr = useT();
   const icon = REWARD_ICONS.rotation;
   return (
     <Animated.View entering={FadeIn.duration(200)} style={styles.overlay}>
       <View style={[styles.rewardCard, { borderColor: icon.color }]}>
         <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
-        <Text style={styles.rewardTitle}>Khoan đã!</Text>
-        <Text style={styles.rewardText}>Bạn còn {rotations} lượt xoay chưa dùng</Text>
-        <Text style={styles.applyQuestion}>Xoay khối để đặt tiếp nhé?</Text>
+        <Text style={styles.rewardTitle}>{tr('Hold on!', 'Khoan đã!')}</Text>
+        <Text style={styles.rewardText}>
+          {tr(`You still have ${rotations} unused rotations`, `Bạn còn ${rotations} lượt xoay chưa dùng`)}
+        </Text>
+        <Text style={styles.applyQuestion}>{tr('Rotate a block to keep going?', 'Xoay khối để đặt tiếp nhé?')}</Text>
         <View style={styles.buttonRow}>
           <Pressable style={styles.secondaryButton} onPress={onSkip}>
-            <Text style={styles.secondaryText}>Không cần</Text>
+            <Text style={styles.secondaryText}>{tr('No thanks', 'Không cần')}</Text>
           </Pressable>
           <Pressable style={styles.primaryButton} onPress={onUse}>
-            <Text style={styles.primaryText}>Xoay khối</Text>
+            <Text style={styles.primaryText}>{tr('Rotate', 'Xoay khối')}</Text>
           </Pressable>
         </View>
       </View>
@@ -677,6 +790,7 @@ function RotateOffer({ rotations, onUse, onSkip }: { rotations: number; onUse: (
 }
 
 function ReviewPrompt({ onRate, onLater }: { onRate: () => void; onLater: () => void }) {
+  const tr = useT();
   return (
     <Animated.View entering={FadeIn.duration(250)} style={styles.overlay}>
       <View style={[styles.card, styles.reviewCard]}>
@@ -685,13 +799,13 @@ function ReviewPrompt({ onRate, onLater }: { onRate: () => void; onLater: () => 
             <SymbolView key={i} name="star.fill" size={30} tintColor="#FFD84D" style={styles.reviewStar} />
           ))}
         </View>
-        <Text style={styles.reviewTitle}>Bạn thích trò chơi chứ?</Text>
+        <Text style={styles.reviewTitle}>{tr('Enjoying the game?', 'Bạn thích trò chơi chứ?')}</Text>
         <View style={styles.buttonRow}>
           <Pressable style={styles.secondaryButton} onPress={onLater}>
-            <Text style={styles.secondaryText}>Để sau</Text>
+            <Text style={styles.secondaryText}>{tr('Later', 'Để sau')}</Text>
           </Pressable>
           <Pressable style={styles.primaryButton} onPress={onRate}>
-            <Text style={styles.primaryText}>Đánh giá</Text>
+            <Text style={styles.primaryText}>{tr('Rate', 'Đánh giá')}</Text>
           </Pressable>
         </View>
       </View>
@@ -806,11 +920,12 @@ export function RewardPopup({
     transform: [{ scale: scale.value }],
   }));
   const icon = REWARD_ICONS[kind];
+  const tr = useT();
   return (
     <Animated.View pointerEvents="none" style={[styles.reward, { top }, style]}>
       <View style={[styles.rewardCard, { borderColor: icon.color }]}>
         <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
-        {'title' in icon && <Text style={styles.rewardTitle}>{icon.title}</Text>}
+        {'title' in icon && <Text style={styles.rewardTitle}>{tr(icon.title)}</Text>}
         <Text style={styles.rewardText}>{text}</Text>
       </View>
     </Animated.View>
@@ -818,6 +933,7 @@ export function RewardPopup({
 }
 
 export function ApplyPrompt({ notice }: { notice: Notice }) {
+  const tr = useT();
   useEffect(() => {
     hapticCelebrate();
     playSfx('fireworks');
@@ -835,13 +951,13 @@ export function ApplyPrompt({ notice }: { notice: Notice }) {
       <View style={[styles.rewardCard, { borderColor: icon.color }]}>
         <SymbolView name={icon.name} size={36} tintColor={icon.color} style={styles.rewardIcon} />
         <Text style={styles.rewardText}>{notice.text}</Text>
-        <Text style={styles.applyQuestion}>Dùng ngay bây giờ?</Text>
+        <Text style={styles.applyQuestion}>{tr('Use it now?', 'Dùng ngay bây giờ?')}</Text>
         <View style={styles.buttonRow}>
           <Pressable style={styles.secondaryButton} onPress={() => answer(false)}>
-            <Text style={styles.secondaryText}>Không</Text>
+            <Text style={styles.secondaryText}>{tr('No', 'Không')}</Text>
           </Pressable>
           <Pressable style={styles.primaryButton} onPress={() => answer(true)}>
-            <Text style={styles.primaryText}>Có</Text>
+            <Text style={styles.primaryText}>{tr('Yes', 'Có')}</Text>
           </Pressable>
         </View>
       </View>
@@ -876,6 +992,7 @@ const HEART_MS = 1100;
 const HEART_SIZE = 64;
 
 function NewBestBadge() {
+  const tr = useT();
   const scale = useSharedValue(0.3);
   useEffect(() => {
     scale.value = withSequence(
@@ -890,7 +1007,7 @@ function NewBestBadge() {
   return (
     <Animated.View style={[styles.newBestRow, style]}>
       <SymbolView name="crown.fill" size={22} tintColor="#FFD84D" style={styles.newBestIcon} />
-      <Text style={styles.newBest}>Kỷ lục mới!</Text>
+      <Text style={styles.newBest}>{tr('New record!', 'Kỷ lục mới!')}</Text>
     </Animated.View>
   );
 }
@@ -993,20 +1110,22 @@ export function StageBackground({ color }: { color: string | null }) {
 }
 
 export function RecordBanner({ top }: { top: number }) {
+  const tr = useT();
   return (
     <PopBanner top={top}>
       <View style={styles.recordRow}>
         <SymbolView name="crown.fill" size={34} tintColor="#FFD84D" style={styles.recordIcon} />
-        <Text style={[styles.bannerBig, { color: '#FFD84D' }]}>Kỷ lục mới!</Text>
+        <Text style={[styles.bannerBig, { color: '#FFD84D' }]}>{tr('New record!', 'Kỷ lục mới!')}</Text>
       </View>
     </PopBanner>
   );
 }
 
 export function LinesBanner({ lines, top }: { lines: number; top: number }) {
+  const tr = useT();
   return (
     <PopBanner top={top}>
-      <Text style={styles.bannerWord}>Nổ </Text>
+      <Text style={styles.bannerWord}>{tr('Blast ', 'Nổ ')}</Text>
       <Text style={[styles.bannerBig, { color: lines >= 3 ? '#FF4D6D' : COLORS.accent }]}>x{lines}!</Text>
     </PopBanner>
   );
