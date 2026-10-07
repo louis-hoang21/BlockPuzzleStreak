@@ -1,14 +1,16 @@
 import balance from '../../config/balance.json';
-import { canPlace, clearLines, createBoard, findFullLines, isEmpty, lineCount, place, type Board, type Lines } from './board';
+import { canPlace, createBoard, findFullLines, isEmpty, lineCount, place, type Board, type Lines } from './board';
 import { hasMove } from './game';
 import { paintSet, type Piece } from './pieceGenerator';
 import { createRng } from './rng';
 import { scorePlacement } from './scoreEngine';
-import { stormBoard } from './storm';
+import { ageWear, clearWithWear, presetWear, wearFor } from './spoil';
+import { runSteps, stormBoardSteps } from './storm';
 
 export interface PuzzleState {
   day: string;
   board: Board;
+  wear?: number[];
   tray: (Piece | null)[];
   queue: Piece[];
   total: number;
@@ -25,6 +27,7 @@ export interface PuzzleResult {
   state: PuzzleState;
   placed: Board;
   cleared: Lines;
+  cracked: number[];
   lines: number;
   points: number;
 }
@@ -56,10 +59,14 @@ function sampleBoard(rng: () => number): Board {
 }
 
 export function newPuzzle(day: string): PuzzleState {
+  return runSteps(puzzleSteps(day));
+}
+
+function* puzzleSteps(day: string): Generator<void, PuzzleState> {
   const size = balance.traySize;
   for (let attempt = 0; attempt < SEED_RETRIES; attempt++) {
     const rng = createRng(daySeed(day) + attempt * 7919);
-    const plan = stormBoard(rng.next, sampleBoard(rng.next));
+    const plan = yield* stormBoardSteps(rng.next, sampleBoard(rng.next));
     if (!plan) continue;
     const painted: Piece[] = [];
     let avoid: number[] = [];
@@ -71,6 +78,7 @@ export function newPuzzle(day: string): PuzzleState {
     return {
       day,
       board: plan.board,
+      wear: presetWear(plan.board),
       tray: painted.slice(0, size),
       queue: painted.slice(size),
       total: painted.length,
@@ -86,13 +94,50 @@ export function newPuzzle(day: string): PuzzleState {
   throw new Error(`No storm puzzle for ${day}`);
 }
 
+let daily: { day: string; puzzle: PuzzleState } | null = null;
+let pending: { day: string; promise: Promise<PuzzleState> } | null = null;
+
+const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+function keep(day: string, puzzle: PuzzleState): PuzzleState {
+  daily = { day, puzzle };
+  return puzzle;
+}
+
+export function dailyPuzzle(day: string): PuzzleState {
+  if (daily?.day === day) return daily.puzzle;
+  return keep(day, newPuzzle(day));
+}
+
+export function loadDailyPuzzle(day: string): Promise<PuzzleState> {
+  if (daily?.day === day) return Promise.resolve(daily.puzzle);
+  if (pending?.day === day) return pending.promise;
+  const promise = (async () => {
+    const steps = puzzleSteps(day);
+    for (;;) {
+      if (daily?.day === day) return daily.puzzle;
+      const step = steps.next();
+      if (step.done) return keep(day, step.value);
+      await nextTick();
+    }
+  })();
+  pending = { day, promise };
+  promise.finally(() => {
+    if (pending?.promise === promise) pending = null;
+  });
+  return promise;
+}
+
 export function placeInPuzzle(state: PuzzleState, slot: number, row: number, col: number): PuzzleResult | null {
   const piece = state.tray[slot];
   if (state.over || !piece || !canPlace(state.board, piece.cells, row, col)) return null;
   const placed = place(state.board, piece.cells, row, col, piece.color);
   const cleared = findFullLines(placed);
   const lines = lineCount(cleared);
-  const board = lines > 0 ? clearLines(placed, cleared) : placed;
+  const before = state.wear ? wearFor(state.board, state.wear) : presetWear(state.board);
+  const after = lines > 0 ? clearWithWear(placed, before, cleared, state.combo >= 1) : { board: placed, wear: before, cracked: [] };
+  const board = after.board;
+  const wear = ageWear(board, after.wear, piece.cells, row, col);
   const score = scorePlacement(piece.cells.length, lines, state.combo, lines > 0 && isEmpty(board), state.banked);
 
   let tray = state.tray.map((p, i) => (i === slot ? null : p));
@@ -106,6 +151,7 @@ export function placeInPuzzle(state: PuzzleState, slot: number, row: number, col
   const next: PuzzleState = {
     ...state,
     board,
+    wear,
     tray,
     queue,
     placed: count,
@@ -116,7 +162,7 @@ export function placeInPuzzle(state: PuzzleState, slot: number, row: number, col
     won,
     over: won || !hasMove(board, tray),
   };
-  return { state: next, placed, cleared, lines, points: score.total };
+  return { state: next, placed, cleared, cracked: after.cracked, lines, points: score.total };
 }
 
 export function puzzleStars(state: PuzzleState): number {

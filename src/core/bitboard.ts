@@ -6,7 +6,7 @@ export interface Bits {
   hi: number;
 }
 
-function bitsOf(indices: number[]): Bits {
+export function bitsOf(indices: number[]): Bits {
   let lo = 0;
   let hi = 0;
   for (const i of indices) {

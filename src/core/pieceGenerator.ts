@@ -1,5 +1,5 @@
 import balance from '../../config/balance.json';
-import { boardBits, placeAndClear, placements as spotsFor } from './bitboard';
+import { boardBits, placeAndClear, placements as spotsFor, type Bits } from './bitboard';
 import { canPlace, type Board } from './board';
 import { rotateTimes, sameShape, shapeById, SHAPES, type Shape, type Tier } from './pieces';
 import type { Rng } from './rng';
@@ -8,6 +8,9 @@ export interface Piece {
   shapeId: string;
   color: number;
   cells: Shape;
+  age?: number;
+  aged?: number[];
+  bolt?: number;
 }
 
 function difficultyAt(score: number): number {
@@ -57,11 +60,13 @@ export function randomPiece(rng: Rng, score: number): Piece {
   return { shapeId: def.id, color: 0, cells: rotateTimes(def.cells, turns) };
 }
 
-function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
+const NO_BITS: Bits = { lo: 0, hi: 0 };
+
+function canPlaceAll(board: Board, pieces: readonly Piece[], spoiled: Bits = NO_BITS): boolean {
   const n = board.size;
   let budget = balance.solvableSearchBudget;
   const options = pieces.map((p) => spotsFor(p.cells, n));
-  const search = (lo: number, hi: number, left: number[]): boolean => {
+  const search = (lo: number, hi: number, slo: number, shi: number, left: number[]): boolean => {
     if (left.length === 0) return true;
     for (let i = 0; i < left.length; i++) {
       const rest = left.filter((_, k) => k !== i);
@@ -69,7 +74,9 @@ function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
         if ((lo & spot.lo) !== 0 || (hi & spot.hi) !== 0) continue;
         if (--budget <= 0) return true;
         const next = placeAndClear(lo, hi, spot, n);
-        if (search(next.lo, next.hi, rest)) return true;
+        const keepLo = (lo | spot.lo) & ~next.lo & slo;
+        const keepHi = (hi | spot.hi) & ~next.hi & shi;
+        if (search(next.lo | keepLo, next.hi | keepHi, slo & ~keepLo, shi & ~keepHi, rest)) return true;
       }
     }
     return false;
@@ -78,6 +85,8 @@ function canPlaceAll(board: Board, pieces: readonly Piece[]): boolean {
   return search(
     start.lo,
     start.hi,
+    spoiled.lo,
+    spoiled.hi,
     pieces.map((_, i) => i),
   );
 }
@@ -148,8 +157,6 @@ const CHAIN_KEEP: Record<string, number | undefined> = balance.chainShapeKeep;
 function keepChain(rng: Rng, plan: readonly number[]): boolean {
   return plan.every((k) => rng() < (CHAIN_KEEP[CHAIN_SHAPES[k].id] ?? 1));
 }
-
-type Bits = { lo: number; hi: number };
 
 function clearingMoves(lo: number, hi: number, spots: readonly Bits[], n: number): Bits[] {
   const out: Bits[] = [];
@@ -266,11 +273,17 @@ export function chainSet(rng: Rng, board: Board, sets: number, avoid: readonly n
   );
 }
 
-export function nextPieceSet(rng: Rng, board: Board, score: number, avoid: readonly number[] = []): Piece[] {
-  return paintSet(rng, pickSet(rng, board, score), avoid);
+export function nextPieceSet(
+  rng: Rng,
+  board: Board,
+  score: number,
+  avoid: readonly number[] = [],
+  spoiled: Bits = NO_BITS,
+): Piece[] {
+  return paintSet(rng, pickSet(rng, board, score, spoiled), avoid);
 }
 
-function pickSet(rng: Rng, board: Board, score: number): Piece[] {
+function pickSet(rng: Rng, board: Board, score: number, spoiled: Bits): Piece[] {
   const toughChance = toughSetChance(score);
   if (toughChance > 0 && rng() < toughChance) {
     const tough = toughSet(rng, board, score);
@@ -279,17 +292,17 @@ function pickSet(rng: Rng, board: Board, score: number): Piece[] {
   let set: Piece[] = [];
   for (let attempt = 0; attempt <= balance.fairnessRetries; attempt++) {
     set = Array.from({ length: balance.traySize }, () => randomPiece(rng, score));
-    if (canPlaceAll(board, set)) return set;
+    if (canPlaceAll(board, set, spoiled)) return set;
   }
   const bySize = set.map((p, i) => ({ i, n: p.cells.length })).sort((a, b) => b.n - a.n);
   for (const { i } of bySize) {
     const subs = SMALL_SUBS.map((def) => ({ def, key: rng() })).sort((a, b) => a.key - b.key);
     for (const { def } of subs) {
       set[i] = { shapeId: def.id, color: 0, cells: rotateTimes(def.cells, Math.floor(rng() * 4)) };
-      if (canPlaceAll(board, set)) return set;
+      if (canPlaceAll(board, set, spoiled)) return set;
     }
     set[i] = DOT;
-    if (canPlaceAll(board, set)) return set;
+    if (canPlaceAll(board, set, spoiled)) return set;
   }
   return set;
 }

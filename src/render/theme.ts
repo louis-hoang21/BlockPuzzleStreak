@@ -117,22 +117,6 @@ export interface Skin {
   colors: readonly BlockColor[];
 }
 
-const CLASSIC: BlockColor[] = [
-  { base: '#2F7BFF', light: '#6FA6FF', dark: '#1D4FB8' },
-  { base: '#FF4B4B', light: '#FF8A7A', dark: '#B82A33' },
-  { base: '#3DCB4A', light: '#7CE67F', dark: '#23892E' },
-  { base: '#FFC21A', light: '#FFE070', dark: '#C98A00' },
-  { base: '#FF8A1F', light: '#FFB866', dark: '#C4580A' },
-  { base: '#9B4DFF', light: '#C08BFF', dark: '#6428B8' },
-  { base: '#18C6D8', light: '#6DE3EE', dark: '#0E8A99' },
-  { base: '#FF5FA2', light: '#FF9FC8', dark: '#C23A77' },
-  { base: '#2ED8A3', light: '#7FF0CB', dark: '#1B9971' },
-  { base: '#5B5BFF', light: '#9A9AFF', dark: '#3434B8' },
-  { base: '#B6E61A', light: '#D9F570', dark: '#7FA30A' },
-  { base: '#E040FB', light: '#F08CFF', dark: '#9C1FB3' },
-  { base: '#A0673A', light: '#C99468', dark: '#6B4122' },
-];
-
 export const SKINS: readonly Skin[] = [
   {
     id: 'skin-9',
@@ -154,7 +138,6 @@ export const SKINS: readonly Skin[] = [
       { base: '#6B3A1F', light: '#9C6845', dark: '#42200E' },
     ],
   },
-  { id: 'skin-1', name: { en: 'Classic', vi: 'Cổ điển' }, style: 'bevel', colors: CLASSIC },
   {
     id: 'skin-2',
     name: { en: 'Pastel', vi: 'Pastel' },

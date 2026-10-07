@@ -23,9 +23,10 @@ interface BlockProps {
   color: number;
   skin: Skin;
   opacity?: number;
+  worn?: boolean;
 }
 
-export function Block({ x, y, size, color, skin, opacity = 1 }: BlockProps) {
+export function Block({ x, y, size, color, skin, opacity = 1, worn = false }: BlockProps) {
   const c = skin.colors[color % skin.colors.length];
   const inset = size * 0.015;
   const s = size - inset * 2;
@@ -70,7 +71,7 @@ export function Block({ x, y, size, color, skin, opacity = 1 }: BlockProps) {
     case 'sushi':
       return <SushiBlock x={x} y={y} size={size} c={c} opacity={opacity} />;
     case 'toast':
-      return <ToastBlock x={x} y={y} size={size} c={c} opacity={opacity} />;
+      return <ToastBlock x={x} y={y} size={size} c={c} opacity={opacity} worn={worn} />;
     case 'gem':
       return <GemBlock x0={x0} y0={y0} s={s} c={c} opacity={opacity} />;
     case 'bevel':
@@ -228,7 +229,11 @@ function SushiBlock({ x, y, size, c, opacity }: CellProps) {
   );
 }
 
-function ToastBlock({ x, y, size, c, opacity }: CellProps) {
+const TOAST_CRUST = { top: '#B5763C', bottom: '#8A5427' };
+const WORN_CRUST = { top: '#E6BC86', bottom: '#C4935E' };
+
+function ToastBlock({ x, y, size, c, opacity, worn }: CellProps & { worn: boolean }) {
+  const crust = worn ? WORN_CRUST : TOAST_CRUST;
   const inset = size * 0.015;
   const s = size - inset * 2;
   const x0 = x + inset;
@@ -240,8 +245,8 @@ function ToastBlock({ x, y, size, c, opacity }: CellProps) {
   const jh = s * 0.52;
   return (
     <Group opacity={opacity}>
-      <RoundedRect x={x0} y={y0} width={s} height={s} r={size * 0.07} color="#8A5427" />
-      <RoundedRect x={x0} y={y0} width={s} height={s * 0.94} r={size * 0.07} color="#B5763C" />
+      <RoundedRect x={x0} y={y0} width={s} height={s} r={size * 0.07} color={crust.bottom} />
+      <RoundedRect x={x0} y={y0} width={s} height={s * 0.94} r={size * 0.07} color={crust.top} />
       <RoundedRect x={x0 + b} y={y0 + b} width={s - b * 2} height={s - b * 2.3} r={s * 0.12}>
         <LinearGradient start={vec(x0, y0 + b)} end={vec(x0, y0 + s - b)} colors={['#F7E2B4', '#E9C688']} />
       </RoundedRect>

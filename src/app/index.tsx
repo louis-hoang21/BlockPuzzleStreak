@@ -1,20 +1,47 @@
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { SymbolView, type SFSymbol } from 'expo-symbols';
-import { useState } from 'react';
-import { ImageBackground, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ImageBackground, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CLASSIC_NAME, MODES, STORM_PUZZLE_NAME } from '../core/modes';
+import { initSfx } from '../audio/sfx';
+import { CLASSIC_ENABLED, CLASSIC_NAME, MODES, STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticTap } from '../haptics';
 import { useT } from '../i18n';
+import { dayKey, loadDailyPuzzle } from '../core/stormPuzzle';
 import { MODE_BUTTON_COLORS, ModeButton } from '../ui/ModeButton';
 
 const ART = require('../../assets/welcome.jpg');
+const WARMUP_DELAY_MS = 400;
+const LOADING_FALLBACK_MS = 3000;
+
+const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+async function warmUp() {
+  initSfx();
+  await nextTick();
+  await loadDailyPuzzle(dayKey());
+  await nextTick();
+  const { useGameStore } = await import('../store/gameStore');
+  const store = useGameStore.getState();
+  if (store.modes.jackpot.game.over) store.start('jackpot');
+}
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const tr = useT();
   const [picking, setPicking] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(false);
+      const t = setTimeout(() => {
+        warmUp().catch(() => {});
+      }, WARMUP_DELAY_MS);
+      return () => clearTimeout(t);
+    }, []),
+  );
 
   const openPicker = () => {
     hapticTap();
@@ -26,10 +53,18 @@ export default function WelcomeScreen() {
     setPicking(false);
   };
 
-  const openMode = (href: Href) => {
+  const openMode = (href: Href, prepare?: () => Promise<unknown>) => {
     hapticTap();
     setPicking(false);
-    router.push(href);
+    setLoading(true);
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        (prepare?.() ?? Promise.resolve()).catch(() => {}).finally(() => {
+            router.push(href);
+            setTimeout(() => setLoading(false), LOADING_FALLBACK_MS);
+          });
+      }, 0),
+    );
   };
 
   return (
@@ -52,9 +87,11 @@ export default function WelcomeScreen() {
               <ModeButton
                 label={tr(STORM_PUZZLE_NAME)}
                 colors={MODE_BUTTON_COLORS.orange}
-                onPress={() => openMode('/game/storm-puzzle')}
+                onPress={() => openMode('/game/storm-puzzle', () => loadDailyPuzzle(dayKey()))}
               />
-              <ModeButton label={tr(CLASSIC_NAME)} colors={MODE_BUTTON_COLORS.blue} onPress={() => openMode('/game/classic')} />
+              {CLASSIC_ENABLED && (
+                <ModeButton label={tr(CLASSIC_NAME)} colors={MODE_BUTTON_COLORS.blue} onPress={() => openMode('/game/classic')} />
+              )}
             </View>
             <Pressable
               onPress={closePicker}
@@ -68,6 +105,14 @@ export default function WelcomeScreen() {
         </Pressable>
       </Modal>
 
+      {loading && (
+        <View style={styles.loading} accessibilityLiveRegion="polite">
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#B9773A" />
+            <Text style={styles.loadingText}>{tr('Loading…', 'Đang tải…')}</Text>
+          </View>
+        </View>
+      )}
     </ImageBackground>
   );
 }
@@ -141,4 +186,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closeIcon: { width: 14, height: 14 },
+  loading: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(40, 22, 6, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingCard: {
+    backgroundColor: '#FFF4DC',
+    borderRadius: 20,
+    borderWidth: 4,
+    borderColor: '#B9773A',
+    paddingVertical: 20,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: { fontSize: 16, fontWeight: '800', color: '#7A4A1E' },
 });

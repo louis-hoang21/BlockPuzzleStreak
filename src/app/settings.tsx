@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GIFT_CODES_ENABLED, isTesterCode, isValidGiftCode } from '../core/giftCodes';
+import { CLASSIC_ENABLED } from '../core/modes';
 import { hapticTap, hapticWarning } from '../haptics';
 import { LANGS, useLang, useLangStore, useT } from '../i18n';
 import { cancelReminders, ensurePermission, scheduleReminders } from '../notifications/reminder';
@@ -116,12 +117,16 @@ export default function SettingsScreen() {
           <Row label={tr('Sound', 'Âm thanh')} value={sound} onChange={(v) => update({ sound: v })} />
           <View style={styles.divider} />
           <Row label={tr('Haptics', 'Rung')} value={haptics} onChange={(v) => update({ haptics: v })} />
-          <View style={styles.divider} />
-          <Row
-            label={tr('Control buttons (Classic)', 'Nút điều khiển (Cổ điển)')}
-            value={classicButtons}
-            onChange={(v) => update({ classicButtons: v })}
-          />
+          {CLASSIC_ENABLED && (
+            <>
+              <View style={styles.divider} />
+              <Row
+                label={tr('Control buttons (Classic)', 'Nút điều khiển (Cổ điển)')}
+                value={classicButtons}
+                onChange={(v) => update({ classicButtons: v })}
+              />
+            </>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -231,10 +236,15 @@ function GiftCodeCard() {
           }}
         />
         <Text style={styles.redeemedText}>
-          {tr(
-            '99 rotations, storms arrive very early, preset puzzles show up right away, Classic mode drops lots of gift blocks, all themes and skins unlocked. Applies from your next game.',
-            '99 lượt xoay, bão đến rất sớm, màn xếp sẵn xuất hiện ngay, chế độ Cổ điển ra nhiều khối quà, mở toàn bộ theme và skin. Áp dụng từ ván mới.',
-          )}
+          {CLASSIC_ENABLED
+            ? tr(
+                '99 rotations, storms arrive very early, preset puzzles show up right away, Classic mode drops lots of gift blocks, all themes and skins unlocked. Applies from your next game.',
+                '99 lượt xoay, bão đến rất sớm, màn xếp sẵn xuất hiện ngay, chế độ Cổ điển ra nhiều khối quà, mở toàn bộ theme và skin. Áp dụng từ ván mới.',
+              )
+            : tr(
+                '99 rotations, storms arrive very early, preset puzzles show up right away, all themes and skins unlocked. Applies from your next game.',
+                '99 lượt xoay, bão đến rất sớm, màn xếp sẵn xuất hiện ngay, mở toàn bộ theme và skin. Áp dụng từ ván mới.',
+              )}
         </Text>
         {message?.ok && <Text style={[styles.codeMessage, { color: '#3DCB4A' }]}>{message.text}</Text>}
         <View style={{ height: 12 }} />

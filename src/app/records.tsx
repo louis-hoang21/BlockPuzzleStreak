@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import milestones from '../../config/milestones.json';
 import { SCORE_UNLOCKS } from '../core/milestones';
-import { MODES, type Mode } from '../core/modes';
+import { VISIBLE_MODES, type Mode } from '../core/modes';
 import { hapticTap } from '../haptics';
 import { useT } from '../i18n';
 import { COLORS, skinName, themeName } from '../render/theme';
@@ -14,7 +14,7 @@ import { ScreenHeader } from '../ui/ScreenHeader';
 export default function RecordsScreen() {
   const insets = useSafeAreaInsets();
   const tr = useT();
-  const [mode, setMode] = useState<Mode>(MODES[0].id);
+  const [mode, setMode] = useState<Mode>(VISIBLE_MODES[0].id);
   const { bestScore, totalLinesCleared, gamesPlayed, gamesBelowBest, bestLevel } = useRecordsStore(
     (s) => s.byMode[mode],
   );
@@ -23,9 +23,9 @@ export default function RecordsScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <ScreenHeader title={tr('Records', 'Kỷ lục')} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }}>
-        {MODES.length > 1 && (
+        {VISIBLE_MODES.length > 1 && (
           <View style={styles.tabs}>
-            {MODES.map((m) => (
+            {VISIBLE_MODES.map((m) => (
               <Pressable
                 key={m.id}
                 onPress={() => {

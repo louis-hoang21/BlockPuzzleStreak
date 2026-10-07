@@ -31,14 +31,17 @@ import type { Board } from '../core/board';
 import type { Piece } from '../core/pieceGenerator';
 import { shapeSize, type Shape } from '../core/pieces';
 import { mulberry32 } from '../core/rng';
-import { Block, PieceBlocks } from './Block';
+import { pieceWear, wearOf } from '../core/spoil';
+import { Block } from './Block';
 import { EmptyCell } from './EmptyCell';
+import { BoltMark } from './BoltMark';
 import { GiftBow } from './GiftBow';
 import { BoardFrame } from './BoardFrame';
 import { RainbowWarmup } from './RainbowWarmup';
 import { drawRainbowBoxes, RAINBOW_MS, type Box } from './rainbow';
 import { slotCenter, type BoardLayout } from './layout';
 import type { BoardTheme, Skin } from './theme';
+import { WornBlock, WornPiece } from './WornBlock';
 
 export interface ClearingCell {
   row: number;
@@ -73,10 +76,12 @@ interface Shard {
 interface Props {
   layout: BoardLayout;
   board: Board;
+  wear?: readonly number[];
   tray: readonly (Piece | null)[];
   clearing: ClearEvent | null;
   storm: StormWave | null;
   gift?: number;
+  bolt?: number;
   disabled: boolean;
   onDrop: (slot: number, row: number, col: number) => boolean;
   onRotate: (slot: number) => boolean;
@@ -364,9 +369,15 @@ function TrayPiece({
   });
   return (
     <Group transform={transform}>
-      <PieceBlocks cells={piece.cells} color={piece.color} size={cell} skin={skin} />
+      <WornPiece cells={piece.cells} color={piece.color} size={cell} skin={skin} wears={piece.cells.map((_, k) => pieceWear(piece, k))} />
+      <PieceBolt piece={piece} size={cell} />
     </Group>
   );
+}
+
+function PieceBolt({ piece, size }: { piece: Piece; size: number }) {
+  const at = piece.bolt === undefined ? undefined : piece.cells[piece.bolt];
+  return at ? <BoltMark x={at[1] * size} y={at[0] * size} size={size} /> : null;
 }
 
 function TrayGhost({
@@ -400,7 +411,8 @@ function TrayGhost({
   ]);
   return (
     <Group transform={transform} opacity={opacity}>
-      <PieceBlocks cells={piece.cells} color={piece.color} size={cell} skin={skin} />
+      <WornPiece cells={piece.cells} color={piece.color} size={cell} skin={skin} wears={piece.cells.map((_, k) => pieceWear(piece, k))} />
+      <PieceBolt piece={piece} size={cell} />
     </Group>
   );
 }
@@ -408,12 +420,14 @@ function TrayGhost({
 function PlacedPop({
   pop,
   board,
+  wear,
   layout,
   skin,
   onDone,
 }: {
   pop: Pop;
   board: Board;
+  wear?: readonly number[];
   layout: BoardLayout;
   skin: Skin;
   onDone: (id: number) => void;
@@ -439,11 +453,12 @@ function PlacedPop({
     { translateY: (-rows * cell) / 2 },
   ]);
   const n = board.size;
-  const visible = pop.cells.filter(([r, c]) => board.cells[(pop.row + r) * n + pop.col + c] !== 0);
+  const at = ([r, c]: readonly [number, number]) => (pop.row + r) * n + pop.col + c;
+  const visible = pop.cells.filter((p) => board.cells[at(p)] !== 0);
   if (visible.length === 0) return null;
   return (
     <Group transform={transform}>
-      <PieceBlocks cells={visible} color={pop.color} size={cell} skin={skin} />
+      <WornPiece cells={visible} color={pop.color} size={cell} skin={skin} wears={visible.map((p) => wear?.[at(p)] ?? 0)} />
     </Group>
   );
 }
@@ -451,10 +466,12 @@ function PlacedPop({
 function GameBoardView({
   layout,
   board,
+  wear,
   tray,
   clearing,
   storm,
   gift,
+  bolt,
   disabled,
   onDrop,
   onRotate,
@@ -477,11 +494,13 @@ function GameBoardView({
   const rainbow = useSharedValue(0);
   const twinkle = useSharedValue(1);
   const hasGift = gift !== undefined && board.cells[gift] !== 0;
+  const hasBolt = bolt !== undefined && board.cells[bolt] !== 0;
+  const sparkling = hasGift || hasBolt;
   useEffect(() => {
-    if (!hasGift) return;
+    if (!sparkling) return;
     twinkle.value = withRepeat(withSequence(withTiming(0.25, { duration: GIFT_TWINKLE_MS }), withTiming(1, { duration: GIFT_TWINKLE_MS })), -1);
     return () => cancelAnimation(twinkle);
-  }, [hasGift, twinkle]);
+  }, [sparkling, twinkle]);
   const pressSlot = useSharedValue(-1);
   const activeSlot = useSharedValue(-1);
   const landing = useSharedValue(0);
@@ -828,13 +847,17 @@ function GameBoardView({
       board.cells.map((v, i) => {
         const x = boardX + (i % n) * cell;
         const y = boardY + Math.floor(i / n) * cell;
-        return v === 0 ? (
-          <EmptyCell key={i} x={x} y={y} size={cell} theme={theme} />
-        ) : (
-          <Block key={i} x={x} y={y} size={cell} color={v - 1} skin={skin} />
+        if (v === 0) return <EmptyCell key={i} x={x} y={y} size={cell} theme={theme} />;
+        const block = <WornBlock key={i} x={x} y={y} size={cell} color={v - 1} skin={skin} wear={wear?.[i]} />;
+        if (wearOf(wear?.[i]) !== 'cracked') return block;
+        return (
+          <Group key={i}>
+            <EmptyCell x={x} y={y} size={cell} theme={theme} />
+            {block}
+          </Group>
         );
       }),
-    [board, boardX, boardY, cell, n, theme, skin],
+    [board, wear, boardX, boardY, cell, n, theme, skin],
   );
 
   return (
@@ -846,9 +869,12 @@ function GameBoardView({
         {hasGift && (
           <GiftBow x={boardX + (gift % n) * cell} y={boardY + Math.floor(gift / n) * cell} size={cell} twinkle={twinkle} />
         )}
+        {hasBolt && (
+          <BoltMark x={boardX + (bolt % n) * cell} y={boardY + Math.floor(bolt / n) * cell} size={cell} twinkle={twinkle} />
+        )}
         {oldCells && <Group clip={oldClip}>{oldCells}</Group>}
         <Picture picture={wave} />
-        {pop && <PlacedPop key={`pop-${pop.id}`} pop={pop} board={board} layout={layout} skin={skin} onDone={clearPop} />}
+        {pop && <PlacedPop key={`pop-${pop.id}`} pop={pop} board={board} wear={wear} layout={layout} skin={skin} onDone={clearPop} />}
 
         <Picture picture={highlight} />
         {tray.map((piece, slot) =>

@@ -100,7 +100,7 @@ const COMBO_COLORS = ['#4FC3F7', '#7BD84F', '#FFD84D', '#FF8A1F', '#FF4D6D', '#F
 function clearedCells(result: PlaceResult): ClearingCell[] {
   const { placed, cleared } = result;
   const n = placed.size;
-  const seen = new Set<number>();
+  const seen = new Set<number>(result.cracked);
   const out: ClearingCell[] = [];
   const add = (row: number, col: number) => {
     const i = row * n + col;
@@ -110,6 +110,7 @@ function clearedCells(result: PlaceResult): ClearingCell[] {
   };
   for (const r of cleared.rows) for (let c = 0; c < n; c++) add(r, c);
   for (const c of cleared.cols) for (let r = 0; r < n; r++) add(r, c);
+  for (const i of result.cured) add(Math.floor(i / n), i % n);
   return out;
 }
 
@@ -117,7 +118,9 @@ function popupLabel(result: PlaceResult): string | null {
   const { score } = result;
   if (score.perfectClearPoints > 0) return 'Amazing!';
   if (score.heart) return t(`x${HEART_MULTIPLIER} points`, `x${HEART_MULTIPLIER} điểm`);
+  if (result.cured.length > 0) return t('All spoils cleared!', 'Sạch khối hỏng!');
   if (result.gift) return t('Gift blast!', 'Nổ quà!');
+  if (result.bolt) return t('Lightning!', 'Sét đánh!');
   return null;
 }
 
@@ -258,7 +261,7 @@ export function GameScreen({ mode }: { mode: Mode }) {
           ),
         );
       }
-      if (result.gift) {
+      if (result.gift || result.bolt) {
         const a = 12;
         shakeX.set(
           withSequence(
@@ -514,10 +517,12 @@ export function GameScreen({ mode }: { mode: Mode }) {
             <GameBoard
               layout={layout}
               board={game.board}
+              wear={game.wear}
               tray={game.tray}
               clearing={clearing}
               storm={storm}
               gift={game.gift}
+              bolt={game.bolt}
               disabled={game.over || !onboarded || offer !== null}
               onDrop={onDrop}
               onRotate={onRotate}

@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { initSfx, playSfx } from '../audio/sfx';
-import { dayKey, newPuzzle, placeInPuzzle, puzzleStars, type PuzzleResult, type PuzzleState } from '../core/stormPuzzle';
+import { dailyPuzzle, dayKey, placeInPuzzle, puzzleStars, type PuzzleResult, type PuzzleState } from '../core/stormPuzzle';
 import { STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticCelebrate, hapticClear, hapticGameOver, hapticPlace, hapticTap } from '../haptics';
 import { useLang, useT } from '../i18n';
@@ -27,9 +27,9 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const STAR = '#FFB547';
 const RESULT_DELAY_MS = 700;
 
-function clearedCells({ placed, cleared }: PuzzleResult): ClearingCell[] {
+function clearedCells({ placed, cleared, cracked }: PuzzleResult): ClearingCell[] {
   const n = placed.size;
-  const seen = new Set<number>();
+  const seen = new Set<number>(cracked);
   const out: ClearingCell[] = [];
   const add = (row: number, col: number) => {
     const i = row * n + col;
@@ -55,7 +55,7 @@ export function StormPuzzleScreen() {
   const skin = skinById(useSettingsStore((s) => s.skin));
   const hud = hudColors(theme.tone);
   const today = useMemo(() => dayKey(), []);
-  const [puzzle, setPuzzle] = useState<PuzzleState>(() => newPuzzle(today));
+  const [puzzle, setPuzzle] = useState<PuzzleState>(() => dailyPuzzle(today));
   const [records, setRecords] = useState<PuzzleRecords>(() => loadPuzzleRecords());
   const [layout, setLayout] = useState<BoardLayout | null>(null);
   const [clearing, setClearing] = useState<ClearEvent | null>(null);
@@ -120,7 +120,7 @@ export function StormPuzzleScreen() {
     hapticTap();
     setShowResult(false);
     setClearing(null);
-    setPuzzle(newPuzzle(today));
+    setPuzzle(dailyPuzzle(today));
   };
 
   const stars = puzzleStars(puzzle);
@@ -160,6 +160,7 @@ export function StormPuzzleScreen() {
           <GameBoard
             layout={layout}
             board={puzzle.board}
+            wear={puzzle.wear}
             tray={puzzle.tray}
             clearing={clearing}
             storm={null}

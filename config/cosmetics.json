@@ -9,7 +9,6 @@
   ],
   "skins": [
     { "id": "skin-9", "unlock": { "type": "default" } },
-    { "id": "skin-1", "unlock": { "type": "free" } },
     { "id": "skin-2", "unlock": { "type": "score", "score": 10000 } },
     { "id": "skin-3", "unlock": { "type": "score", "score": 25000 } },
     { "id": "skin-4", "unlock": { "type": "combo", "multiplier": 3 } },

@@ -135,23 +135,25 @@ function shuffle<T>(rng: Rng, items: readonly T[]): T[] {
   return out;
 }
 
-export function shuffleBoard(rng: Rng, board: Board): Board {
+export function shuffleBoard(rng: Rng, board: Board, wear: readonly number[]): { board: Board; wear: number[] } {
   const n = board.size;
-  const colors = shuffle(rng, board.cells.filter((v) => v !== 0));
+  const from = shuffle(rng, board.cells.flatMap((v, i) => (v !== 0 ? [i] : [])));
   const filled = new Array<boolean>(n * n).fill(false);
   const cells = new Array<number>(n * n).fill(0);
+  const moved = new Array<number>(n * n).fill(0);
   const spots = shuffle(rng, Array.from({ length: n * n }, (_, i) => i));
   let c = 0;
   for (const i of spots) {
-    if (c >= colors.length) break;
+    if (c >= from.length) break;
     filled[i] = true;
     if (hasFullLine(n, filled)) {
       filled[i] = false;
       continue;
     }
-    cells[i] = colors[c++];
+    moved[i] = wear[from[c]];
+    cells[i] = board.cells[from[c++]];
   }
-  return { size: n, cells };
+  return { board: { size: n, cells }, wear: moved };
 }
 
 export interface Storm {
@@ -160,10 +162,21 @@ export interface Storm {
 }
 
 export function stormBoard(rng: Rng, board: Board): Storm | null {
-  return buildStorm(rng, board, cfg.chainPieces, cfg.budget);
+  return runSteps(stormBoardSteps(rng, board));
 }
 
-function buildStorm(rng: Rng, board: Board, steps: number, budget: number): Storm | null {
+export function* stormBoardSteps(rng: Rng, board: Board): Generator<void, Storm | null> {
+  return yield* buildStorm(rng, board, cfg.chainPieces, cfg.budget);
+}
+
+export function runSteps<T>(steps: Generator<void, T>): T {
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+function* buildStorm(rng: Rng, board: Board, steps: number, budget: number): Generator<void, Storm | null> {
   const n = board.size;
   const colors = board.cells.filter((v) => v !== 0);
   const target = Math.min(cfg.maxCells, Math.max(cfg.minCells, colors.length));
@@ -178,6 +191,7 @@ function buildStorm(rng: Rng, board: Board, steps: number, budget: number): Stor
       bestGap = gap;
     }
     if (bestGap <= cfg.tolerance) break;
+    yield;
   }
   if (!best) return null;
   const palette = colors.length > 0 ? shuffle(rng, colors) : [1];

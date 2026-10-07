@@ -58,9 +58,32 @@
     "prefillChance": 0.5,
     "maxStorms": 10
   },
+  "spoil": {
+    "warnAt": 5,
+    "at": 8,
+    "maxCells": 2,
+    "baked": {
+      "chance": 0.2,
+      "minAge": 2,
+      "maxAge": 4,
+      "maxFill": 0.5
+    },
+    "fade": {
+      "maxChance": 0.25,
+      "fromScore": 10000,
+      "toScore": 35000,
+      "minChance": 0.0005
+    }
+  },
   "gift": {
     "bonus": 1000,
-    "radius": 1
+    "radius": 1,
+    "cureChance": 0.5
+  },
+  "bolt": {
+    "trayChance": 0.06,
+    "boardChance": 0.35,
+    "bonus": 500
   },
   "heart": {
     "multiplier": 4,
@@ -116,7 +139,7 @@
   "solvableSearchBudget": 20000,
   "colorStageEvery": 5000,
   "reviewPrompt": {
-    "chance": 0.25,
+    "chance": 0.2,
     "maxPerDevice": 2,
     "minDelayMs": 1500,
     "maxDelayMs": 5000

@@ -2,6 +2,8 @@ import { SymbolView, type SFSymbol } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import balance from '../../config/balance.json';
+import { SPOIL_AT } from '../core/spoil';
 import { hapticTap } from '../haptics';
 import { useT, type Localized } from '../i18n';
 
@@ -12,7 +14,13 @@ interface Step {
   special?: boolean;
 }
 
-export const TUTORIAL_VERSION = 3;
+export const TUTORIAL_VERSION = 5;
+
+const points = (n: number, sep: string) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, sep);
+const GIFT_BONUS = balance.gift.bonus;
+const BOLT_BONUS = balance.bolt.bonus;
+const CURE_PERCENT = Math.round(balance.gift.cureChance * 100);
+const MAX_AGED = balance.spoil.maxCells;
 
 const STEPS: Step[] = [
   {
@@ -32,6 +40,15 @@ const STEPS: Step[] = [
     },
   },
   {
+    icon: 'flame.fill',
+    title: { en: 'Clear it before it burns', vi: 'Nổ trước khi bánh cháy' },
+    body: {
+      en: `Some blocks you place start to age, only 1 to ${MAX_AGED} cells at a time. Dots count the turns left: after ${SPOIL_AT} turns the cell goes bad. Toast burns, sushi spoils, flowers wilt, the rest freeze. A bad cell cracks in half on its first clear, but a clear on a x2+ combo wipes it out at once. Toasted cells in the tray are already on the clock. The higher your score, the rarer this gets.`,
+      vi: `Một số khối đặt xuống sẽ bắt đầu hư, mỗi lần chỉ 1–${MAX_AGED} ô. Chấm trên ô là số lượt còn lại: quá ${SPOIL_AT} lượt ô sẽ hỏng. Bánh mì cháy, sushi ôi, hoa héo, các khối khác đóng băng. Ô hỏng nổ lần đầu chỉ vỡ còn một nửa, nhưng nổ khi đang combo x2 trở lên thì sạch luôn. Ô sạm trên khay là ô đã nướng dở. Điểm càng cao, khối hỏng càng hiếm.`,
+    },
+    special: true,
+  },
+  {
     icon: 'arrow.clockwise',
     title: { en: 'Rotate blocks', vi: 'Xoay khối' },
     body: {
@@ -44,8 +61,17 @@ const STEPS: Step[] = [
     icon: 'tornado',
     title: { en: 'Storm meter', vi: 'Thanh năng lượng bão' },
     body: {
-      en: 'Every clear charges the meter below the tray. When it fills, tap it to call a storm that sweeps the board clean or reshuffles it. Great for getting out of a jam!',
-      vi: 'Mỗi lần nổ hàng nạp năng lượng vào thanh dưới khay. Thanh đầy thì chạm vào để gọi bão: quét sạch bàn hoặc xáo lại các khối. Cứu bàn lúc kẹt cực hay!',
+      en: 'Every clear charges the meter below the tray. When it fills, tap it to call a storm: it blows away every bad block, then sweeps the board clean or reshuffles it, and reshuffled blocks come back fresh. Great for getting out of a jam!',
+      vi: 'Mỗi lần nổ hàng nạp năng lượng vào thanh dưới khay. Thanh đầy thì chạm vào để gọi bão: thổi bay mọi khối hỏng, rồi quét sạch bàn hoặc xáo lại các khối, khối được xáo lại đều tươi mới. Cứu bàn lúc kẹt cực hay!',
+    },
+    special: true,
+  },
+  {
+    icon: 'gift.fill',
+    title: { en: 'Gifts and lightning', vi: 'Quà và sét' },
+    body: {
+      en: `After a storm, a gift or a lightning bolt may sit on a block. Clear the gift's line: it also blasts the lines next to it, gives +${points(GIFT_BONUS, ',')} points and has a ${CURE_PERCENT}% chance to wipe out every bad block. Lightning can also ride on tray blocks: clear its row and it strikes the column too, clear its column and it strikes the row, wiping out bad blocks on those lines for +${points(BOLT_BONUS, ',')} points. Gift and lightning cells never go bad.`,
+      vi: `Sau mỗi lần bão, quà hoặc sét có thể nằm trên một khối. Nổ đường chứa quà: nổ thêm các hàng, cột sát bên, +${points(GIFT_BONUS, '.')} điểm và ${CURE_PERCENT}% cơ hội dọn sạch mọi khối hỏng. Sét còn xuất hiện trên khối ở khay: nổ hàng chứa sét thì sét đánh thêm cột, nổ cột thì đánh thêm hàng, dọn sạch khối hỏng trên các đường đó, +${points(BOLT_BONUS, '.')} điểm. Ô quà và ô sét không bao giờ hỏng.`,
     },
     special: true,
   },
