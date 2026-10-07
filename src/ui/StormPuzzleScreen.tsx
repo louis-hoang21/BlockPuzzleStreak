@@ -263,7 +263,8 @@ function Calendar({ records, today }: { records: PuzzleRecords; today: string })
           const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const got = records.days[key] ?? 0;
           return (
-            <View key={key} style={[styles.day, key === today && styles.today, got > 0 && styles.solved]}>
+            <View key={key} style={[styles.day, got > 0 && styles.solved]}>
+              {key === today && <View pointerEvents="none" style={styles.today} />}
               <Text style={[styles.dayText, got > 0 && styles.solvedText]}>{d}</Text>
               {got > 0 && <Text style={styles.dayStars}>{'★'.repeat(got)}</Text>}
             </View>
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
   },
-  today: { borderWidth: 2, borderColor: '#3FA9F5' },
+  today: { ...StyleSheet.absoluteFillObject, borderRadius: 8, borderWidth: 2, borderColor: '#3FA9F5' },
   solved: { backgroundColor: '#F3DDB4' },
   dayText: { color: INK_DIM, fontSize: 13, fontWeight: '600' },
   solvedText: { color: INK, fontWeight: '800' },
