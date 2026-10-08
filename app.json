@@ -19,7 +19,7 @@
       "ios"
     ],
     "ios": {
-      "buildNumber": "6",
+      "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
         "CADisableMinimumFrameDurationOnPhone": true
