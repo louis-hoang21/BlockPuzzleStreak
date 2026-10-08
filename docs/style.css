@@ -10,3 +10,8 @@ p, li { color: var(--dim); }
 a { color: var(--accent); }
 nav a { margin-right: 16px; }
 .lang { margin-top: 32px; padding-top: 16px; border-top: 1px solid rgba(127,127,127,.25); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.switch { display: inline-flex; border: 1px solid rgba(127,127,127,.35); border-radius: 999px; overflow: hidden; }
+.switch button { border: 0; background: transparent; color: var(--dim); font: 600 14px/1 -apple-system, system-ui, sans-serif; padding: 8px 14px; cursor: pointer; }
+.switch button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+html[data-lang="en"] [data-l="vi"], html[data-lang="vi"] [data-l="en"] { display: none; }

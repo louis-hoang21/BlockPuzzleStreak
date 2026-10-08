@@ -11,7 +11,7 @@
         "CFBundleDisplayName": "Toast Twister"
       }
     },
-    "version": "1.1.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
       "ios"
     ],
     "ios": {
-      "buildNumber": "5",
+      "buildNumber": "6",
       "supportsTablet": false,
       "infoPlist": {
         "CADisableMinimumFrameDurationOnPhone": true

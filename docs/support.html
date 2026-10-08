@@ -1,25 +1,44 @@
 <!doctype html>
-<html lang="vi">
+<html lang="en" data-lang="en" data-title-en="Support · Toast Twister" data-title-vi="Hỗ trợ · Toast Twister">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hỗ trợ · Toast Twister</title>
+<title>Support · Toast Twister</title>
 <link rel="stylesheet" href="style.css">
+<script src="lang.js"></script>
 </head>
 <body>
 <main>
-  <nav><a href="index.html">Trang chủ</a><a href="privacy.html">Chính sách quyền riêng tư</a></nav>
-  <div class="card">
+  <div class="top">
+    <nav>
+      <a href="index.html"><span data-l="en">Home</span><span data-l="vi">Trang chủ</span></a>
+      <a href="privacy.html"><span data-l="en">Privacy Policy</span><span data-l="vi">Chính sách quyền riêng tư</span></a>
+    </nav>
+    <div class="switch" role="group" aria-label="Language"><button type="button" data-set="en">EN</button><button type="button" data-set="vi">VI</button></div>
+  </div>
+
+  <div class="card" data-l="en">
+    <h1>Support</h1>
+    <p>Found a bug or have feedback? Open an issue on <a href="https://github.com/louis-hoang21/BlockPuzzleStreak/issues">GitHub Issues</a> with your iPhone model, iOS version and app version (shown at the bottom of Settings).</p>
+    <h2>FAQ</h2>
+    <p><strong>No sound?</strong> Check the iPhone silent switch and Sound in the game's Settings. In silent mode the game plays no sound but still vibrates.</p>
+    <p><strong>No vibration?</strong> Turn on Haptics in the game's Settings and System Haptics in iOS Settings → Sounds &amp; Haptics. Low Power Mode can turn haptics off.</p>
+    <p><strong>How do I change the language?</strong> The game follows your iPhone's language (English or Vietnamese). You can change it in the game's Settings → "Language / Ngôn ngữ".</p>
+    <p><strong>Do I lose progress if I delete the app?</strong> Records and games in progress are lost. Unlocked themes and skins are kept in the device Keychain.</p>
+    <p><strong>Is the daily puzzle the same for everyone?</strong> Yes. Each day has one fixed board and 12 fixed pieces, generated on the device without internet.</p>
+    <p><strong>Does it need internet?</strong> No. The game works fully offline and collects no data.</p>
+  </div>
+
+  <div class="card" data-l="vi">
     <h1>Hỗ trợ</h1>
     <p>Gặp lỗi hoặc có góp ý? Tạo một issue tại <a href="https://github.com/louis-hoang21/BlockPuzzleStreak/issues">GitHub Issues</a>, ghi kèm đời iPhone, phiên bản iOS và phiên bản ứng dụng (xem ở cuối màn Cài đặt).</p>
     <h2>Câu hỏi thường gặp</h2>
     <p><strong>Không có tiếng?</strong> Kiểm tra công tắc im lặng của iPhone và mục Âm thanh trong Cài đặt của game. Khi bật im lặng, game không phát tiếng nhưng vẫn rung.</p>
     <p><strong>Không rung?</strong> Bật Rung trong Cài đặt của game và Cảm ứng hệ thống trong Cài đặt iOS → Âm thanh &amp; Cảm ứng. Chế độ Nguồn điện thấp có thể tắt rung.</p>
-    <p><strong>Xoá app có mất tiến trình không?</strong> Kỷ lục và ván đang chơi sẽ mất. Theme, skin đã mở và lượt xoay được giữ trong Keychain của máy.</p>
-    <p><strong>Có cần mạng không?</strong> Không. Game chạy hoàn toàn offline.</p>
-    <div class="lang"></div>
-    <h2>English</h2>
-    <p>Found a bug or have feedback? Open an issue on <a href="https://github.com/louis-hoang21/BlockPuzzleStreak/issues">GitHub Issues</a> with your iPhone model, iOS version and app version (shown at the bottom of Settings). The game works fully offline and collects no data.</p>
+    <p><strong>Đổi ngôn ngữ thế nào?</strong> Game theo ngôn ngữ của iPhone (Tiếng Việt hoặc English). Bạn có thể đổi trong Cài đặt của game → "Language / Ngôn ngữ".</p>
+    <p><strong>Xoá app có mất tiến trình không?</strong> Kỷ lục và ván đang chơi sẽ mất. Theme, skin đã mở được giữ trong Keychain của máy.</p>
+    <p><strong>Câu đố mỗi ngày có giống nhau cho mọi người không?</strong> Có. Mỗi ngày một bàn cố định và 12 khối cố định, tạo ngay trên máy, không cần mạng.</p>
+    <p><strong>Có cần mạng không?</strong> Không. Game chạy hoàn toàn offline và không thu thập dữ liệu.</p>
   </div>
 </main>
 </body>

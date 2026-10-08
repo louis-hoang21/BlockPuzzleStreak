@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
   },
-  today: { ...StyleSheet.absoluteFillObject, borderRadius: 8, borderWidth: 2, borderColor: '#3FA9F5' },
+  today: { ...StyleSheet.absoluteFill, borderRadius: 8, borderWidth: 2, borderColor: '#3FA9F5' },
   solved: { backgroundColor: '#F3DDB4' },
   dayText: { color: INK_DIM, fontSize: 13, fontWeight: '600' },
   solvedText: { color: INK, fontWeight: '800' },
