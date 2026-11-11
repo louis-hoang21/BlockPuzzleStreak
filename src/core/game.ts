@@ -25,7 +25,6 @@ import {
   presetWear,
   removeSpoiled,
   shieldWear,
-  spoilChance,
   spoiledBits,
   spoiledCells,
   wearFor,
@@ -134,21 +133,8 @@ export function newGame(
 }
 
 function needByScore(score: number): number {
-  const { atScore, need } = balance.storm.needByScore;
-  let value = need[0];
-  atScore.forEach((at, i) => {
-    if (score >= at) value = need[i];
-  });
-  return value;
-}
-
-function wipeChance(score: number): number {
-  const { atScore, chance } = balance.storm.wipeChance;
-  let value = chance[0];
-  atScore.forEach((at, i) => {
-    if (score >= at) value = chance[i];
-  });
-  return value;
+  const { base, from, every, add } = balance.storm.need;
+  return score < from ? base : base + add * (Math.floor((score - from) / every) + 1);
 }
 
 export function stormNeedAt(state: GameState, score = state.score): number {
@@ -246,7 +232,7 @@ export function placePiece(state: GameState, slot: number, row: number, col: num
       }
     : blasted;
   const fate = createRng((state.rngState ^ 0x2c1b3c6d ^ Math.imul(state.stats.placements + 1, 0x9e3779b1)) >>> 0);
-  const keep = fate.next() >= spoilChance(state.score);
+  const keep = fate.next() >= balance.spoil.chance;
   const aging = agingCells(piece, fate.next, keep);
   const before = shieldWear(placeWear(wearFor(state.board, state.wear), placed.size, piece, row, col, aging), boltAt);
   const cleaned = n > 0 ? clearWithWear(placed, before, cleared, state.combo >= 1 || bolt !== undefined) : { board: placed, wear: before, cracked: [] };
@@ -276,7 +262,7 @@ export function placePiece(state: GameState, slot: number, row: number, col: num
       (chainSets && chainSet(rng.next, board, chainSets, setColors)) ||
       nextPieceSet(rng.next, board, state.score + score.total, setColors, spoiledBits(wear));
     chainSets = chainSets && chainSets > 1 ? chainSets - 1 : undefined;
-    const baked = bakeSet(rng.next, fresh, board, false, state.score + score.total);
+    const baked = bakeSet(rng.next, fresh, board, false);
     tray = boltSet(rng.next, baked, nextBolt !== undefined);
     setColors = fresh.map((p) => p.color);
     rngState = rng.state();
@@ -319,7 +305,7 @@ export function castStorm(state: GameState): StormResult | null {
   const cleaned = removeSpoiled(state.board, wearFor(state.board, state.wear));
   const filled = cleaned.board.cells.some((v) => v !== 0);
   let shuffled: { board: Board; wear: number[] } | null = null;
-  if (filled && rng.next() >= wipeChance(state.score)) {
+  if (filled && rng.next() >= balance.storm.wipeChance) {
     for (let attempt = 0; attempt < balance.storm.shuffleAttempts && !shuffled; attempt++) {
       const candidate = shuffleBoard(rng.next, cleaned.board, cleaned.wear);
       if (hasMove(candidate.board, state.tray)) shuffled = candidate;

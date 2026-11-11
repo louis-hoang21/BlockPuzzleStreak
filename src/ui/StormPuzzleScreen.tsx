@@ -2,21 +2,40 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import balance from '../../config/balance.json';
 import { initSfx, playSfx } from '../audio/sfx';
-import { dailyPuzzle, dayKey, placeInPuzzle, puzzleStars, type PuzzleResult, type PuzzleState } from '../core/stormPuzzle';
+import {
+  cachedPuzzle,
+  clearedRatio,
+  dayKey,
+  levelsForStreak,
+  loadPuzzle,
+  minutesForStreak,
+  placeInPuzzle,
+  puzzleFor,
+  puzzleStars,
+  type PuzzleResult,
+  type PuzzleState,
+} from '../core/stormPuzzle';
 import { STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticCelebrate, hapticClear, hapticGameOver, hapticPlace, hapticTap } from '../haptics';
 import { useLang, useT } from '../i18n';
-import { loadPuzzleRecords, savePuzzleStars, type PuzzleRecords } from '../persistence/stormPuzzle';
+import {
+  loadPuzzleRecords,
+  puzzleStreak,
+  puzzleVariant,
+  reshufflePuzzle,
+  savePuzzleStars,
+  type PuzzleRecords,
+} from '../persistence/stormPuzzle';
 import { ThemeBackdrop } from '../render/Backdrops';
 import { GameBoard, type ClearEvent, type ClearingCell } from '../render/GameBoard';
 import { computeLayout, type BoardLayout } from '../render/layout';
 import { hudColors, skinById, themeById } from '../render/theme';
 import { useSettingsStore } from '../store/settingsStore';
-
 
 const NO_SLOTS: readonly number[] = [];
 const WEEKDAYS = {
@@ -47,6 +66,17 @@ function prettyDay(day: string, lang: 'en' | 'vi'): string {
   return lang === 'en' ? `${MONTHS[Number(m) - 1].slice(0, 3)} ${Number(d)}, ${y}` : `${d}/${m}/${y}`;
 }
 
+type Outcome = { kind: 'timeout' | 'lost' | 'level' | 'done'; stars: number; percent: number };
+
+const [ONE_STAR, TWO_STARS] = balance.puzzle.stars.map((v) => Math.round(v * 100));
+
+const percentOf = (puzzle: PuzzleState) => Math.floor((clearedRatio(puzzle) + 1e-9) * 100);
+
+function clock(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 export function StormPuzzleScreen() {
   const insets = useSafeAreaInsets();
   const tr = useT();
@@ -55,33 +85,127 @@ export function StormPuzzleScreen() {
   const skin = skinById(useSettingsStore((s) => s.skin));
   const hud = hudColors(theme.tone);
   const today = useMemo(() => dayKey(), []);
-  const [puzzle, setPuzzle] = useState<PuzzleState>(() => dailyPuzzle(today));
   const [records, setRecords] = useState<PuzzleRecords>(() => loadPuzzleRecords());
+  const streak = useMemo(() => puzzleStreak(records, today), [records, today]);
+  const levels = levelsForStreak(streak);
+  const minutes = minutesForStreak(streak);
+  const limitMs = minutes * 60_000;
+  const [variant, setVariant] = useState(() => puzzleVariant(today));
+  const [level, setLevel] = useState(0);
+  const [levelStars, setLevelStars] = useState<number[]>([]);
+  const [puzzle, setPuzzle] = useState<PuzzleState | null>(() => puzzleFor({ day: today, level: 0, variant }));
+  const [deadline, setDeadline] = useState(() => Date.now() + limitMs);
+  const [now, setNow] = useState(() => Date.now());
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [layout, setLayout] = useState<BoardLayout | null>(null);
   const [clearing, setClearing] = useState<ClearEvent | null>(null);
-  const [showResult, setShowResult] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const eventId = useRef(0);
+  const finished = useRef(false);
+  const loadToken = useRef(0);
+  const inRun = useRef(false);
+
+  const running = puzzle !== null && !puzzle.over && outcome === null;
 
   useEffect(() => {
     initSfx();
   }, []);
 
   useEffect(() => {
-    if (!puzzle.over) return;
-    const stars = puzzleStars(puzzle);
-    const t = setTimeout(() => {
-      if (stars > 0) {
-        hapticCelebrate();
-        playSfx(stars === 3 ? 'newRecordWin' : 'tieRecord');
-      } else {
+    inRun.current = outcome === null ? level > 0 || (puzzle?.placed ?? 0) > 0 : outcome.kind === 'level';
+  }, [outcome, level, puzzle]);
+
+  useEffect(
+    () => () => {
+      if (inRun.current) reshufflePuzzle(today);
+    },
+    [today],
+  );
+
+  const prefetch = useCallback(
+    (lv: number, v: number) => {
+      if (lv < levels) loadPuzzle({ day: today, level: lv, variant: v }).catch(() => {});
+    },
+    [levels, today],
+  );
+
+  useEffect(() => {
+    prefetch(1, variant);
+  }, [prefetch, variant]);
+
+  const finish = useCallback(
+    (current: PuzzleState, stars: number, timeout: boolean) => {
+      if (finished.current) return;
+      finished.current = true;
+      const percent = percentOf(current);
+      if (stars === 0) {
         hapticGameOver();
         playSfx('gameOver');
+        const next = reshufflePuzzle(today);
+        setVariant(next);
+        prefetch(0, next);
+        setOutcome({ kind: timeout ? 'timeout' : 'lost', stars: 0, percent });
+        return;
       }
-      setShowResult(true);
-    }, RESULT_DELAY_MS);
+      const all = [...levelStars, stars];
+      setLevelStars(all);
+      hapticCelebrate();
+      if (all.length < levels) {
+        playSfx('tieRecord');
+        setOutcome({ kind: 'level', stars, percent });
+        return;
+      }
+      const dayStars = Math.min(...all);
+      playSfx(dayStars === 3 ? 'newRecordWin' : 'tieRecord');
+      setRecords(savePuzzleStars(today, dayStars));
+      setOutcome({ kind: 'done', stars: dayStars, percent });
+    },
+    [levelStars, levels, prefetch, today],
+  );
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  useEffect(() => {
+    if (!running || !puzzle) return;
+    const t = setTimeout(() => finish(puzzle, 0, true), Math.max(0, deadline - Date.now()));
     return () => clearTimeout(t);
-  }, [puzzle]);
+  }, [running, puzzle, deadline, finish]);
+
+  useEffect(() => {
+    if (!puzzle?.over || outcome) return;
+    const t = setTimeout(() => finish(puzzle, puzzleStars(puzzle), false), RESULT_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [puzzle, outcome, finish]);
+
+  const startLevel = (lv: number, v: number) => {
+    hapticTap();
+    finished.current = false;
+    setOutcome(null);
+    setClearing(null);
+    setLevel(lv);
+    if (lv === 0) setLevelStars([]);
+    const key = { day: today, level: lv, variant: v };
+    const token = ++loadToken.current;
+    const apply = (next: PuzzleState) => {
+      if (token !== loadToken.current) return;
+      setPuzzle(next);
+      const start = Date.now();
+      setNow(start);
+      setDeadline(start + limitMs);
+      prefetch(lv + 1, v);
+    };
+    const hit = cachedPuzzle(key);
+    if (hit) {
+      apply(hit);
+      return;
+    }
+    setPuzzle(null);
+    loadPuzzle(key).then(apply, () => {});
+  };
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -90,11 +214,10 @@ export function StormPuzzleScreen() {
 
   const onDrop = useCallback(
     (slot: number, row: number, col: number) => {
+      if (!puzzle || outcome) return false;
       const result = placeInPuzzle(puzzle, slot, row, col);
       if (!result) return false;
       setPuzzle(result.state);
-      const earned = puzzleStars(result.state);
-      if (earned > 0) setRecords(savePuzzleStars(result.state.day, earned));
       if (result.lines > 0) {
         setClearing({
           id: ++eventId.current,
@@ -111,20 +234,21 @@ export function StormPuzzleScreen() {
       }
       return true;
     },
-    [puzzle],
+    [puzzle, outcome],
   );
 
   const onRotate = useCallback(() => false, []);
 
-  const restart = () => {
-    hapticTap();
-    setShowResult(false);
-    setClearing(null);
-    setPuzzle(dailyPuzzle(today));
-  };
-
-  const stars = puzzleStars(puzzle);
-  const best = records.days[today] ?? 0;
+  const percent = puzzle ? percentOf(puzzle) : 0;
+  const liveStars = puzzle ? puzzleStars(puzzle) : 0;
+  const rules = tr(
+    `1 star: clear ${ONE_STAR}% of the blocks. 2 stars: ${TWO_STARS}%. 3 stars: clear the grid completely.`,
+    `1 sao: dọn ${ONE_STAR}% số khối. 2 sao: ${TWO_STARS}%. 3 sao: dọn sạch lưới.`,
+  );
+  const todayPlan = tr(
+    `Streak ${streak} ${streak === 1 ? 'day' : 'days'} · today ${levels} ${levels === 1 ? 'level' : 'levels'}, ${minutes} min each`,
+    `Chuỗi ${streak} ngày · hôm nay ${levels} màn, ${minutes} phút mỗi màn`,
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
@@ -139,7 +263,7 @@ export function StormPuzzleScreen() {
             {tr(STORM_PUZZLE_NAME)}
           </Text>
           <Text style={[styles.subtitle, { color: hud.textDim }]}>
-            {prettyDay(today, lang)} · {tr('Chain clears', 'Nổ liên hoàn')} {puzzle.chained}/{puzzle.total}
+            {prettyDay(today, lang)} · {tr('Level', 'Màn')} {level + 1}/{levels} · {clock(outcome?.kind === 'timeout' ? 0 : deadline - now)}
           </Text>
         </View>
         <Pressable
@@ -156,7 +280,7 @@ export function StormPuzzleScreen() {
       </View>
 
       <View style={styles.boardArea} onLayout={onLayout}>
-        {layout && (
+        {layout && puzzle && (
           <GameBoard
             layout={layout}
             board={puzzle.board}
@@ -164,7 +288,7 @@ export function StormPuzzleScreen() {
             tray={puzzle.tray}
             clearing={clearing}
             storm={null}
-            disabled={puzzle.over}
+            disabled={!running}
             onDrop={onDrop}
             onRotate={onRotate}
             hintSlots={NO_SLOTS}
@@ -172,51 +296,81 @@ export function StormPuzzleScreen() {
             skin={skin}
           />
         )}
-        {layout && (
+        {layout && puzzle && (
           <View style={[styles.info, { left: layout.trayX, top: layout.meterY, width: layout.trayWidth, height: layout.meterHeight }]}>
             <Text style={[styles.infoText, { color: hud.text }]}>
-              {tr('Blocks', 'Khối')} {puzzle.placed}/{puzzle.total} · {tr('Score', 'Điểm')} {puzzle.score.toLocaleString()}
+              {tr('Cleared', 'Đã dọn')} {percent}% · {tr('Blocks', 'Khối')} {puzzle.placed}/{puzzle.total}
             </Text>
-            <Stars count={best} size={14} />
+            <Stars count={liveStars} size={14} />
+          </View>
+        )}
+        {!puzzle && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={hud.text} />
           </View>
         )}
       </View>
 
-      {showResult && (
+      {outcome && (
         <View style={styles.overlay}>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>{stars > 0 ? tr('Solved!', 'Đã giải xong!') : tr('No room left', 'Hết chỗ đặt')}</Text>
-            <Stars count={stars} size={34} />
-            <Text style={styles.cardBody}>
-              {stars === 3
-                ? tr('All 12 blocks chained. Perfect!', 'Cả 12 khối đều nổ liên hoàn. Hoàn hảo!')
-                : stars > 0
-                  ? tr(
-                      `Chained ${puzzle.chained}/${puzzle.total} blocks. Try again for 3 stars!`,
-                      `Nổ liên hoàn ${puzzle.chained}/${puzzle.total} khối. Thử lại để đạt 3 sao!`,
-                    )
-                  : tr('Every block has a spot that clears. Try again!', 'Mỗi khối đều có một chỗ nổ. Thử lại nhé!')}
+            <Text style={styles.cardTitle}>
+              {outcome.kind === 'timeout'
+                ? tr("Time's up!", 'Hết giờ!')
+                : outcome.kind === 'lost'
+                  ? tr('Not yet', 'Chưa đạt')
+                  : outcome.kind === 'level'
+                    ? tr(`Level ${level + 1}/${levels} done`, `Xong màn ${level + 1}/${levels}`)
+                    : tr('Solved!', 'Đã giải xong!')}
             </Text>
-            <Calendar records={records} today={today} />
+            <Stars count={outcome.stars} size={34} />
+            <Text style={styles.cardBody}>
+              {outcome.kind === 'timeout'
+                ? tr(
+                    `You ran out of time. Play again and the blocks will be rearranged.`,
+                    `Hết thời gian màn này. Chơi lại, các khối sẽ được xếp lại.`,
+                  )
+                : outcome.kind === 'lost'
+                  ? tr(
+                      `Cleared ${outcome.percent}%, you need ${ONE_STAR}% for 1 star. Play again and the blocks will be rearranged.`,
+                      `Dọn được ${outcome.percent}%, cần ${ONE_STAR}% để có 1 sao. Chơi lại, các khối sẽ được xếp lại.`,
+                    )
+                  : outcome.kind === 'level'
+                    ? tr(
+                        `Cleared ${outcome.percent}%. ${levels - level - 1} more to earn today's stars.`,
+                        `Dọn được ${outcome.percent}%. Còn ${levels - level - 1} màn nữa để nhận sao hôm nay.`,
+                      )
+                    : outcome.stars === 3
+                      ? tr('Every level cleared completely. Perfect!', 'Dọn sạch mọi màn. Hoàn hảo!')
+                      : levels > 1
+                        ? tr(`Today's stars come from your lowest level. ${rules}`, `Sao hôm nay tính theo màn thấp nhất. ${rules}`)
+                        : rules}
+            </Text>
+            {outcome.kind !== 'level' && <Calendar records={records} today={today} />}
             <View style={styles.row}>
               <Pressable style={styles.secondary} onPress={() => router.back()} accessibilityRole="button">
                 <Text style={styles.secondaryText}>{tr('Home', 'Về')}</Text>
               </Pressable>
-              <Pressable style={styles.primary} onPress={restart} accessibilityRole="button">
-                <Text style={styles.primaryText}>{tr('Play again', 'Chơi lại')}</Text>
+              <Pressable
+                style={styles.primary}
+                onPress={() => (outcome.kind === 'level' ? startLevel(level + 1, variant) : startLevel(0, variant))}
+                accessibilityRole="button"
+              >
+                <Text style={styles.primaryText}>{outcome.kind === 'level' ? tr('Next level', 'Màn tiếp') : tr('Play again', 'Chơi lại')}</Text>
               </Pressable>
             </View>
           </View>
         </View>
       )}
 
-      {showCalendar && !showResult && (
+      {showCalendar && !outcome && (
         <View style={styles.overlay}>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{tr('Puzzle calendar', 'Lịch giải đố')}</Text>
             <Text style={styles.cardBody}>
-              {tr('A new puzzle every day, the same for every player.', 'Mỗi ngày một đề mới, giống nhau cho mọi người chơi.')}
+              {tr('A new puzzle every day, the same for every player.', 'Mỗi ngày một đề mới, giống nhau cho mọi người chơi.')} {rules}
             </Text>
+            <Text style={styles.cardBody}>{todayPlan}</Text>
             <Calendar records={records} today={today} />
             <Pressable style={[styles.primary, styles.single]} onPress={() => setShowCalendar(false)} accessibilityRole="button">
               <Text style={styles.primaryText}>{tr('Close', 'Đóng')}</Text>
@@ -287,6 +441,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '900' },
   subtitle: { fontSize: 13, fontWeight: '600', marginTop: 2 },
   boardArea: { flex: 1 },
+  loadingBox: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   info: { position: 'absolute', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6 },
   infoText: { fontSize: 14, fontWeight: '700' },
   stars: { flexDirection: 'row', gap: 4, justifyContent: 'center' },

@@ -43,8 +43,8 @@ const STEPS: Step[] = [
     icon: 'flame.fill',
     title: { en: 'Clear it before it burns', vi: 'Nổ trước khi bánh cháy' },
     body: {
-      en: `Some blocks you place start to age, only 1 to ${MAX_AGED} cells at a time. Dots count the turns left: after ${SPOIL_AT} turns the cell goes bad. Toast burns, sushi spoils, flowers wilt, the rest freeze. A bad cell cracks in half on its first clear, but a clear on a x2+ combo wipes it out at once. Toasted cells in the tray are already on the clock. The higher your score, the rarer this gets.`,
-      vi: `Một số khối đặt xuống sẽ bắt đầu hư, mỗi lần chỉ 1–${MAX_AGED} ô. Chấm trên ô là số lượt còn lại: quá ${SPOIL_AT} lượt ô sẽ hỏng. Bánh mì cháy, sushi ôi, hoa héo, các khối khác đóng băng. Ô hỏng nổ lần đầu chỉ vỡ còn một nửa, nhưng nổ khi đang combo x2 trở lên thì sạch luôn. Ô sạm trên khay là ô đã nướng dở. Điểm càng cao, khối hỏng càng hiếm.`,
+      en: `Some blocks you place start to age, only 1 to ${MAX_AGED} cells at a time. Dots count the turns left: after ${SPOIL_AT} turns the cell goes bad. Toast burns, sushi spoils, flowers wilt, the rest freeze. A bad cell cracks in half on its first clear, but a clear on a x2+ combo wipes it out at once. Toasted cells in the tray are already on the clock.`,
+      vi: `Một số khối đặt xuống sẽ bắt đầu hư, mỗi lần chỉ 1–${MAX_AGED} ô. Chấm trên ô là số lượt còn lại: quá ${SPOIL_AT} lượt ô sẽ hỏng. Bánh mì cháy, sushi ôi, hoa héo, các khối khác đóng băng. Ô hỏng nổ lần đầu chỉ vỡ còn một nửa, nhưng nổ khi đang combo x2 trở lên thì sạch luôn. Ô sạm trên khay là ô đã nướng dở.`,
     },
     special: true,
   },

@@ -28,13 +28,6 @@ export function turnsLeft(w: number | undefined): number | null {
   return wearOf(w) === 'warn' ? SPOIL_AT - ageOf(w) : null;
 }
 
-export function spoilChance(score: number): number {
-  const { maxChance, fromScore, toScore, minChance } = balance.spoil.fade;
-  if (score <= fromScore) return maxChance;
-  if (score >= toScore) return minChance;
-  return maxChance - ((maxChance - minChance) * (score - fromScore)) / (toScore - fromScore);
-}
-
 export function pieceWear(piece: Piece, k: number): number {
   if (!piece.age || (piece.aged && !piece.aged.includes(k))) return 0;
   return piece.age | BAKED;
@@ -138,13 +131,12 @@ export function bakeSet(
   tray: readonly Piece[],
   board: Board,
   force: boolean,
-  score = 0,
 ): Piece[] {
   const { chance, minAge, maxAge, maxFill } = balance.spoil.baked;
   const fill = board.cells.filter((v) => v !== 0).length / board.cells.length;
   const roll = rng();
   const slot = Math.floor(rng() * tray.length);
   const age = minAge + Math.floor(rng() * (maxAge - minAge + 1));
-  if (!force && (fill > maxFill || roll >= (chance * spoilChance(score)) / balance.spoil.fade.maxChance)) return tray.slice();
+  if (!force && (fill > maxFill || roll >= chance)) return tray.slice();
   return tray.map((p, i) => (i === slot ? { ...p, age, aged: pickAged(rng, p.cells.length) } : p));
 }

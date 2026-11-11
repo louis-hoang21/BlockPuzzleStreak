@@ -8,7 +8,8 @@ import { initSfx } from '../audio/sfx';
 import { CLASSIC_ENABLED, CLASSIC_NAME, MODES, STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticTap } from '../haptics';
 import { useT } from '../i18n';
-import { dayKey, loadDailyPuzzle } from '../core/stormPuzzle';
+import { dayKey, loadPuzzle } from '../core/stormPuzzle';
+import { puzzleVariant } from '../persistence/stormPuzzle';
 import { MODE_BUTTON_COLORS, ModeButton } from '../ui/ModeButton';
 
 const ART = require('../../assets/welcome.jpg');
@@ -17,10 +18,15 @@ const LOADING_FALLBACK_MS = 3000;
 
 const nextTick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+function loadTodayPuzzle() {
+  const day = dayKey();
+  return loadPuzzle({ day, level: 0, variant: puzzleVariant(day) });
+}
+
 async function warmUp() {
   initSfx();
   await nextTick();
-  await loadDailyPuzzle(dayKey());
+  await loadTodayPuzzle();
   await nextTick();
   const { useGameStore } = await import('../store/gameStore');
   const store = useGameStore.getState();
@@ -87,7 +93,7 @@ export default function WelcomeScreen() {
               <ModeButton
                 label={tr(STORM_PUZZLE_NAME)}
                 colors={MODE_BUTTON_COLORS.orange}
-                onPress={() => openMode('/game/storm-puzzle', () => loadDailyPuzzle(dayKey()))}
+                onPress={() => openMode('/game/storm-puzzle', loadTodayPuzzle)}
               />
               {CLASSIC_ENABLED && (
                 <ModeButton label={tr(CLASSIC_NAME)} colors={MODE_BUTTON_COLORS.blue} onPress={() => openMode('/game/classic')} />

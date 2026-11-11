@@ -68,12 +68,7 @@
       "maxAge": 4,
       "maxFill": 0.5
     },
-    "fade": {
-      "maxChance": 0.25,
-      "fromScore": 10000,
-      "toScore": 35000,
-      "minChance": 0.0005
-    }
+    "chance": 0.25
   },
   "gift": {
     "bonus": 1000,
@@ -93,15 +88,14 @@
     "energyPerLine": 1,
     "energyPerCombo": 1,
     "firstGameNeed": 4,
-    "needByScore": {
-      "atScore": [0, 15000, 25000, 35000],
-      "need": [12, 15, 18, 20]
+    "need": {
+      "base": 12,
+      "from": 10000,
+      "every": 5000,
+      "add": 5
     },
     "maxStorms": 5,
-    "wipeChance": {
-      "atScore": [0, 15000, 20000, 25000, 30000, 35000, 40000],
-      "chance": [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]
-    },
+    "wipeChance": 0.1,
     "shuffleAttempts": 20,
     "chainPieces": 12,
     "seedCells": 6,
@@ -135,6 +129,15 @@
       "hard": 15
     },
     "topBest": 40000
+  },
+  "puzzle": {
+    "stars": [0.7, 0.9, 1],
+    "levelEvery": 5,
+    "maxLevels": 5,
+    "minutes": {
+      "atStreak": [0, 5, 10],
+      "limit": [30, 20, 10]
+    }
   },
   "solvableSearchBudget": 20000,
   "colorStageEvery": 5000,

@@ -4,7 +4,7 @@ export type Mode = 'jackpot' | 'classic';
 
 export type BoardMode = 'jackpot';
 
-export const CLASSIC_ENABLED = false;
+export const CLASSIC_ENABLED = true;
 
 export const CLASSIC_NAME: Localized = { en: 'Classic', vi: 'Cổ điển, tôn trọng' };
 
