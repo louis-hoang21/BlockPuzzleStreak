@@ -18,6 +18,7 @@ export interface PuzzleState {
   level: number;
   variant: number;
   seeds: number[];
+  target: number;
   par: number;
   budget: number;
   burnChance?: number;
@@ -89,6 +90,7 @@ export interface PuzzleTune {
   burn: number;
   mix: number;
   minutes: number;
+  hard: boolean;
 }
 
 export const MAP_DAY = 'map';
@@ -97,19 +99,40 @@ export function mapKey(level: number): PuzzleKey {
   return { day: MAP_DAY, level, variant: 0 };
 }
 
+export function isHardLevel(level: number): boolean {
+  const { every } = balance.puzzle.map.hard;
+  return level > 0 && level % every === 0;
+}
+
 export function mapTune(level: number): PuzzleTune {
   const m = balance.puzzle.map;
   let k = 0;
   m.atLevel.forEach((at, i) => {
     if (level >= at) k = i;
   });
-  return { chain: m.chain[k], extra: m.extra[k], burn: m.burn[k], mix: m.mix[k], minutes: m.minutes[k] };
+  if (isHardLevel(level)) {
+    const { pieces, burn, mix } = m.hard;
+    return { chain: [pieces, pieces], extra: 0, burn: Math.max(burn, m.burn[k]), mix: Math.max(mix, m.mix[k]), minutes: m.minutes[k], hard: true };
+  }
+  return { chain: m.chain[k], extra: m.extra[k], burn: m.burn[k], mix: m.mix[k], minutes: m.minutes[k], hard: false };
 }
 
 function tuneFor({ day, level }: PuzzleKey): Omit<PuzzleTune, 'minutes'> {
   if (day === MAP_DAY) return mapTune(level);
   const p = balance.puzzle;
-  return { chain: p.chain, extra: p.extra.pieces[0], burn: p.burnChance, mix: p.mixChance };
+  return { chain: p.chain, extra: p.extra.pieces[0], burn: p.burnChance, mix: p.mixChance, hard: false };
+}
+
+function solvesFully(start: PuzzleState, moves: readonly (readonly [number, number])[]): boolean {
+  let state = start;
+  for (let i = 0; i < moves.length; i++) {
+    const [row, col] = moves[i];
+    const result = placeInPuzzle(state, i % balance.traySize, row, col);
+    if (!result) return false;
+    state = result.state;
+    if (state.won) return true;
+  }
+  return false;
 }
 
 export function newPuzzle(key: PuzzleKey): PuzzleState {
@@ -125,11 +148,14 @@ function* puzzleSteps(key: PuzzleKey): Generator<void, PuzzleState> {
   const tune = tuneFor(key);
   const size = balance.traySize;
   const seed = (daySeed(day) + Math.imul(level, 104729) + Math.imul(variant, 15485863)) >>> 0;
-  for (let attempt = 0; attempt < SEED_RETRIES; attempt++) {
+  const retries = tune.hard ? balance.puzzle.map.hard.retries : SEED_RETRIES;
+  let fallback: PuzzleState | null = null;
+  let safe: PuzzleState | null = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
     const rng = createRng(seed + attempt * 7919);
     const [low, high] = tune.chain;
     const steps = low + Math.floor(rng.next() * (high - low + 1));
-    const plan = yield* stormBoardSteps(rng.next, sampleBoard(rng.next), steps);
+    const plan = yield* stormBoardSteps(rng.next, sampleBoard(rng.next), steps, tune.hard);
     if (!plan) continue;
     const painted: Piece[] = [];
     let avoid: number[] = [];
@@ -140,11 +166,12 @@ function* puzzleSteps(key: PuzzleKey): Generator<void, PuzzleState> {
     }
     const gift = pickGift(rng.next, plan.board);
     const bolt = rng.next() < balance.bolt.boardChance ? pickGift(rng.next, plan.board, gift) : undefined;
-    return {
+    const puzzle: PuzzleState = {
       day,
       level,
       variant,
       seeds: plan.board.cells.flatMap((v, i) => (v !== 0 ? [i] : [])),
+      target: plan.board.cells.filter((v) => v !== 0).length,
       par: plan.pieces.length,
       budget: plan.pieces.length + tune.extra,
       burnChance: tune.burn,
@@ -164,7 +191,14 @@ function* puzzleSteps(key: PuzzleKey): Generator<void, PuzzleState> {
       over: false,
       won: false,
     };
+    if (!tune.hard || solvesFully(puzzle, plan.moves)) return puzzle;
+    const calm: PuzzleState = { ...puzzle, bolt: undefined, burnChance: 0, mixChance: 0 };
+    if (solvesFully(calm, plan.moves)) safe ??= calm;
+    fallback ??= puzzle;
+    yield;
   }
+  if (safe) return safe;
+  if (fallback) return fallback;
   throw new Error(`No puzzle for ${day} level ${level}`);
 }
 
@@ -382,17 +416,23 @@ export function piecesLeft(state: PuzzleState): number {
   return Math.max(0, state.budget - state.placed);
 }
 
+export const STAR_MARKS: readonly number[] = balance.puzzle.starsCleared;
+
+export function clearedShare(state: PuzzleState): number {
+  return state.target > 0 ? (state.target - state.seeds.length) / state.target : 1;
+}
+
+export function clearedPercent(state: PuzzleState): number {
+  return Math.floor(clearedShare(state) * 100 + 1e-6);
+}
+
 export function starsFor(state: PuzzleState): number {
-  const slack = state.budget - state.par;
-  const left = piecesLeft(state);
-  const [two, three] = balance.puzzle.starsLeft;
-  if (left >= Math.ceil(slack * three)) return 3;
-  if (left >= Math.ceil(slack * two)) return 2;
-  return 1;
+  const share = clearedShare(state) + 1e-6;
+  return STAR_MARKS.filter((mark) => share >= mark).length;
 }
 
 export function puzzleStars(state: PuzzleState): number {
-  return state.won ? starsFor(state) : 0;
+  return starsFor(state);
 }
 
 export function levelsForStreak(streak: number): number {

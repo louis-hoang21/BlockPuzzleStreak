@@ -6,7 +6,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { initSfx, playSfx } from '../audio/sfx';
-import { cachedPuzzle, loadPuzzle, mapKey, mapTune, piecesLeft, puzzleStars, withBudget, type PuzzleState } from '../core/stormPuzzle';
+import { cachedPuzzle, clearedPercent, isHardLevel, loadPuzzle, mapKey, mapTune, puzzleStars, withBudget, type PuzzleState } from '../core/stormPuzzle';
 import { hapticCelebrate, hapticGameOver, hapticTap } from '../haptics';
 import { useT } from '../i18n';
 import { levelStars, loadMapRecords, saveLevelStars } from '../persistence/puzzleMap';
@@ -16,6 +16,7 @@ import { hudColors, skinById, themeById } from '../render/theme';
 import { useSettingsStore } from '../store/settingsStore';
 import {
   clock,
+  endedText,
   endReason,
   howToPlay,
   kit,
@@ -23,12 +24,13 @@ import {
   Overlay,
   PuzzleStage,
   RESULT_DELAY_MS,
+  resultText,
   Stars,
   usePuzzleFx,
   type Reason,
 } from './puzzleKit';
 
-type Outcome = { won: boolean; reason: Reason; stars: number; best: number; left: number; seeds: number };
+type Outcome = { won: boolean; reason: Reason; stars: number; best: number; percent: number };
 
 function ready(level: number): PuzzleState | null {
   const hit = cachedPuzzle(mapKey(level));
@@ -110,18 +112,17 @@ export function StormLevelScreen({ start }: { start: number }) {
       if (finished.current) return;
       finished.current = true;
       const stars = puzzleStars(current);
-      const left = piecesLeft(current);
-      const seeds = current.seeds.length;
+      const percent = clearedPercent(current);
       if (stars === 0) {
         hapticGameOver();
         playSfx('gameOver');
-        setOutcome({ won: false, reason, stars: 0, best: levelStars(loadMapRecords(), level), left, seeds });
+        setOutcome({ won: false, reason, stars: 0, best: levelStars(loadMapRecords(), level), percent });
         return;
       }
       hapticCelebrate();
       const records = saveLevelStars(level, stars);
       playSfx(stars === 3 ? 'newRecordWin' : 'tieRecord');
-      setOutcome({ won: true, reason, stars, best: levelStars(records, level), left, seeds });
+      setOutcome({ won: true, reason, stars, best: levelStars(records, level), percent });
     },
     [level],
   );
@@ -189,7 +190,7 @@ export function StormLevelScreen({ start }: { start: number }) {
         </Pressable>
         <View style={kit.titleBox}>
           <Text style={[kit.title, { color: hud.text }]} numberOfLines={1}>
-            {tr('Level', 'Màn')} {level}
+            {isHardLevel(level) ? tr(`👑 Hard level ${level}`, `👑 Màn khó ${level}`) : `${tr('Level', 'Màn')} ${level}`}
           </Text>
           <Text style={[kit.subtitle, { color: hud.textDim }]}>{clock(outcome?.reason === 'timeout' ? 0 : deadline - now)}</Text>
         </View>
@@ -203,13 +204,10 @@ export function StormLevelScreen({ start }: { start: number }) {
           <Text style={kit.cardTitle}>{outcome.won ? tr(`Level ${level} done!`, `Xong màn ${level}!`) : lostTitle(tr, outcome.reason)}</Text>
           <Stars count={outcome.stars} size={34} />
           <Text style={kit.cardBody}>
-            {outcome.won
-              ? tr(`${outcome.left} pieces to spare.`, `Còn dư ${outcome.left} khối.`) +
-                (outcome.best > outcome.stars ? tr(` Your best here is ${outcome.best} stars.`, ` Kỷ lục màn này: ${outcome.best} sao.`) : '')
-              : tr(
-                  `${outcome.seeds} dotted ${outcome.seeds === 1 ? 'block' : 'blocks'} left. Try the same level again.`,
-                  `Còn ${outcome.seeds} khối có chấm. Thử lại màn này nhé.`,
-                )}
+            {(outcome.won ? endedText(tr, outcome.reason) : '') +
+              resultText(tr, outcome.stars, outcome.percent) +
+              (outcome.best > outcome.stars ? tr(` Your best here is ${outcome.best} stars.`, ` Kỷ lục màn này: ${outcome.best} sao.`) : '') +
+              (outcome.won ? '' : tr(' Try the same level again.', ' Thử lại màn này nhé.'))}
           </Text>
           <View style={kit.row}>
             <Pressable style={kit.secondary} onPress={toMap} accessibilityRole="button">

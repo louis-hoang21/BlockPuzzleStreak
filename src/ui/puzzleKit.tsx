@@ -2,9 +2,8 @@ import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 
-import balance from '../../config/balance.json';
 import { playSfx } from '../audio/sfx';
-import { piecesLeft, placeInPuzzle, starsFor, type PuzzleResult, type PuzzleState } from '../core/stormPuzzle';
+import { clearedPercent, piecesLeft, placeInPuzzle, STAR_MARKS, starsFor, type PuzzleResult, type PuzzleState } from '../core/stormPuzzle';
 import { hapticCelebrate, hapticClear, hapticPlace, hapticWarning } from '../haptics';
 import { useT } from '../i18n';
 import { GameBoard, type ClearEvent, type ClearingCell, type FireEvent, type StormWave } from '../render/GameBoard';
@@ -12,6 +11,9 @@ import { computeLayout, type BoardLayout } from '../render/layout';
 import type { BoardTheme, Skin } from '../render/theme';
 
 export const STAR = '#FFB547';
+const STAR_LIT = '#FFC21A';
+const STAR_RIM = '#FFFFFF';
+const STAR_EMPTY = 'rgba(122, 85, 53, 0.35)';
 export const INK = '#4E2F17';
 export const INK_DIM = '#7A5535';
 export const RESULT_DELAY_MS = 700;
@@ -21,7 +23,7 @@ const GIFT_SFX_DELAY_MS = 120;
 const FLASH_MS = 1600;
 const LOW_PIECES = 3;
 
-const [TWO_STARS, THREE_STARS] = balance.puzzle.starsLeft.map((v) => Math.round(v * 100));
+const [ONE_STAR, TWO_STARS] = STAR_MARKS.map((v) => Math.round(v * 100));
 
 type Tr = ReturnType<typeof useT>;
 
@@ -40,15 +42,33 @@ export function lostTitle(tr: Tr, reason: Reason): string {
 
 export function puzzleRules(tr: Tr): string {
   return tr(
-    `Clear every dotted block before your pieces run out. 1 star: done. 2 stars: ${TWO_STARS}% of the spare pieces left. 3 stars: ${THREE_STARS}% left.`,
-    `Phá hết các khối có chấm trước khi hết khối. 1 sao: hoàn thành. 2 sao: còn ${TWO_STARS}% số khối dư. 3 sao: còn ${THREE_STARS}%.`,
+    `Clear the dotted blocks to fill the star bar: ${ONE_STAR}% cleared lights 1 star, ${TWO_STARS}% lights 2 stars, all of them lights 3 stars and ends the level. A lit star stays lit, so keep playing. The level ends when your pieces run out, there is no room left or the time runs out. You lose only if no star is lit.`,
+    `Phá các khối có chấm để làm đầy thanh sao: phá ${ONE_STAR}% sáng 1 sao, ${TWO_STARS}% sáng 2 sao, phá hết sáng 3 sao và xong màn ngay. Sao đã sáng thì giữ nguyên, cứ chơi tiếp. Màn kết thúc khi hết khối, hết chỗ đặt hoặc hết giờ. Chưa sáng sao nào mới tính là thua.`,
   );
+}
+
+export function endedText(tr: Tr, reason: Reason): string {
+  if (reason === 'pieces') return tr('Out of pieces. ', 'Hết khối. ');
+  if (reason === 'stuck') return tr('No room left. ', 'Hết chỗ đặt. ');
+  if (reason === 'timeout') return tr("Time's up. ", 'Hết giờ. ');
+  return '';
+}
+
+export function resultText(tr: Tr, stars: number, percent: number): string {
+  if (stars === 0) {
+    return tr(
+      `You cleared ${percent}% of the dotted blocks. Clear ${ONE_STAR}% to light the first star.`,
+      `Phá được ${percent}% khối có chấm. Cần phá ${ONE_STAR}% để sáng sao đầu tiên.`,
+    );
+  }
+  if (stars === 3) return tr('Every dotted block cleared!', 'Đã phá hết khối có chấm!');
+  return tr(`You cleared ${percent}% of the dotted blocks. Clear them all for 3 stars.`, `Phá được ${percent}% khối có chấm. Phá hết để được 3 sao.`);
 }
 
 export function howToPlay(tr: Tr): string {
   return tr(
-    `The blocks on the grid at the start carry a white dot. Clear them all to win. Each level gives a limited number of pieces, counting down as you place them. You lose if the pieces run out, the time runs out, or there is no room left before every dotted block is gone. Gifts and lightning work like in Storm Combo. Watch out for tray pieces with a flame (clearing its line sets every block on the crossing line on fire and spoils it) or swirling arrows (clearing its line shuffles the board). ${puzzleRules(tr)}`,
-    `Các khối có sẵn trên lưới lúc đầu mang chấm trắng. Phá hết chúng là thắng. Mỗi màn có số khối giới hạn, đếm lùi mỗi lần đặt. Hết khối, hết giờ hoặc hết chỗ đặt mà chưa phá hết khối có chấm là thua. Quà và sét hoạt động như Chuỗi Nổ. Cẩn thận khối trên khay có ngọn lửa (nổ đường chứa nó thì lửa lan sang mọi khối trên đường vuông góc, làm chúng hỏng) hoặc vòng mũi tên xoáy (nổ đường chứa nó thì cả bàn bị xáo trộn). ${puzzleRules(tr)}`,
+    `The blocks on the grid at the start carry a white dot. Each level gives a limited number of pieces, counting down as you place them. Gifts and lightning work like in Storm Combo. Watch out for tray pieces with a flame (clearing its line sets every block on the crossing line on fire and spoils it) or swirling arrows (clearing its line shuffles the board). ${puzzleRules(tr)}`,
+    `Các khối có sẵn trên lưới lúc đầu mang chấm trắng. Mỗi màn có số khối giới hạn, đếm lùi mỗi lần đặt. Quà và sét hoạt động như Chuỗi Nổ. Cẩn thận khối trên khay có ngọn lửa (nổ đường chứa nó thì lửa lan sang mọi khối trên đường vuông góc, làm chúng hỏng) hoặc vòng mũi tên xoáy (nổ đường chứa nó thì cả bàn bị xáo trộn). ${puzzleRules(tr)}`,
   );
 }
 
@@ -107,6 +127,8 @@ export function usePuzzleFx(): PuzzleFx {
     (puzzle: PuzzleState, slot: number, row: number, col: number) => {
       const result = placeInPuzzle(puzzle, slot, row, col);
       if (!result) return null;
+      const lit = starsFor(result.state);
+      const starText = lit > starsFor(puzzle) ? tr(lit === 1 ? '1 star!' : `${lit} stars!`, `Đạt ${lit} sao!`) : null;
       if (result.lines === 0) {
         hapticPlace();
         playSfx('place');
@@ -134,7 +156,9 @@ export function usePuzzleFx(): PuzzleFx {
         setFlash({
           id,
           text:
-            result.burned.length > 0 && result.mixed
+            starText && !result.state.won
+              ? starText
+              : result.burned.length > 0 && result.mixed
               ? tr('Fire and shuffle!', 'Cháy và xáo bàn!')
               : result.mixed
                 ? tr('Shuffle! The board was mixed up', 'Xáo bàn! Các khối bị trộn lại')
@@ -144,7 +168,10 @@ export function usePuzzleFx(): PuzzleFx {
           hapticWarning();
           playSfx('rotate');
         }, GIFT_SFX_DELAY_MS);
+      } else if (starText && !result.state.won) {
+        setFlash({ id: ++eventId.current, text: starText });
       }
+      if (starText) hapticCelebrate();
       return result.state;
     },
     [tr],
@@ -210,7 +237,7 @@ export function PuzzleStage({
               {tr(`Your blocks: ${left}`, `Khối của bạn: ${left}`)}
             </Text>
           </View>
-          <Stars count={starsFor(puzzle)} size={14} />
+          <StarMeter puzzle={puzzle} />
         </View>
       )}
       {layout && fx.flash && (
@@ -227,13 +254,41 @@ export function PuzzleStage({
   );
 }
 
+function StarMeter({ puzzle }: { puzzle: PuzzleState }) {
+  const tr = useT();
+  const percent = clearedPercent(puzzle);
+  return (
+    <View style={kit.meter} accessibilityLabel={tr(`${percent}% of dotted blocks cleared`, `Đã phá ${percent}% khối có chấm`)}>
+      <View style={kit.meterTrack}>
+        <View style={[kit.meterFill, { width: `${percent}%` }]} />
+        {STAR_MARKS.filter((mark) => mark < 1).map((mark) => (
+          <View key={mark} style={[kit.meterMark, { left: `${mark * 100}%` }]} />
+        ))}
+      </View>
+      <Text style={kit.meterText}>{percent}%</Text>
+      <Stars count={starsFor(puzzle)} size={14} />
+    </View>
+  );
+}
+
 export function Stars({ count, size }: { count: number; size: number }) {
   const tr = useT();
   return (
     <View style={kit.stars} accessibilityLabel={tr(count === 1 ? '1 star' : `${count} stars`, `${count} sao`)}>
-      {[0, 1, 2].map((i) => (
-        <SymbolView key={i} name={i < count ? 'star.fill' : 'star'} size={size} tintColor={STAR} style={{ width: size, height: size }} />
-      ))}
+      {[0, 1, 2].map((i) => {
+        const inner = Math.round(size * 0.66);
+        return (
+          <View key={i} style={[kit.star, { width: size, height: size }]}>
+            <SymbolView name="star.fill" size={size} tintColor={STAR_RIM} style={{ width: size, height: size }} />
+            <SymbolView
+              name="star.fill"
+              size={inner}
+              tintColor={i < count ? STAR_LIT : STAR_EMPTY}
+              style={[kit.starInner, { width: inner, height: inner, top: (size - inner) / 2 + size * 0.03, left: (size - inner) / 2 }]}
+            />
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -271,7 +326,27 @@ export const kit = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
+  meter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 10 },
+  meterTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(78, 47, 23, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  meterFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: STAR_LIT, borderRadius: 999 },
+  meterMark: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: 'rgba(255, 255, 255, 0.9)' },
+  meterText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'], minWidth: 34, textAlign: 'right', textShadowColor: 'rgba(0, 0, 0, 0.45)', textShadowRadius: 2 },
   stars: { flexDirection: 'row', gap: 4, justifyContent: 'center' },
+  star: {
+    shadowColor: '#5A2E08',
+    shadowOpacity: 0.45,
+    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  starInner: { position: 'absolute' },
   overlay: {
     ...StyleSheet.absoluteFill,
     zIndex: 20,

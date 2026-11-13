@@ -25,9 +25,12 @@ function hasFullLine(n: number, filled: readonly boolean[]): boolean {
   return rows.length + cols.length > 0;
 }
 
+type Move = [number, number];
+
 interface Step {
   before: boolean[];
   piece: Piece;
+  at: Move;
 }
 
 const lineCache = new Map<number, { cells: number[][]; of: number[][] }>();
@@ -46,7 +49,7 @@ function linesOf(n: number) {
 function unclearOptions(rng: Rng, n: number, after: readonly boolean[]): Step[] {
   const { cells: allLines, of } = linesOf(n);
   const counts = allLines.map((cells) => cells.filter((i) => after[i]).length);
-  const options: { line: number; spot: number[]; id: string; shape: Shape; key: number }[] = [];
+  const options: { line: number; spot: number[]; id: string; shape: Shape; key: number; at: Move }[] = [];
   for (let line = 0; line < n * 2; line++) {
     if (counts[line] > 0) continue;
     const cells = allLines[line];
@@ -84,7 +87,7 @@ function unclearOptions(rng: Rng, n: number, after: readonly boolean[]): Step[] 
           let empty = 0;
           for (const c of left) if (c === 0) empty++;
           const key = empty * 2 + outside * 0.5 + Math.log(weight) + rng() * 3;
-          options.push({ line, spot, id, shape, key });
+          options.push({ line, spot, id, shape, key, at: [row, col] });
         }
       }
     }
@@ -92,25 +95,26 @@ function unclearOptions(rng: Rng, n: number, after: readonly boolean[]): Step[] 
   return options
     .sort((x, y) => y.key - x.key)
     .slice(0, cfg.branch)
-    .map(({ line, spot, id, shape }) => {
+    .map(({ line, spot, id, shape, at }) => {
       const before = after.slice();
       for (const i of allLines[line]) before[i] = true;
       for (const i of spot) before[i] = false;
-      return { before, piece: { shapeId: id, color: 0, cells: shape } };
+      return { before, piece: { shapeId: id, color: 0, cells: shape }, at };
     });
 }
 
 interface Plan {
   filled: boolean[];
   pieces: Piece[];
+  moves: Move[];
 }
 
 function unclearChain(rng: Rng, n: number, after: boolean[], steps: number, budget: { left: number }): Plan | null {
-  if (steps === 0) return { filled: after, pieces: [] };
+  if (steps === 0) return { filled: after, pieces: [], moves: [] };
   if (--budget.left < 0) return null;
-  for (const { before, piece } of unclearOptions(rng, n, after)) {
+  for (const { before, piece, at } of unclearOptions(rng, n, after)) {
     const found = unclearChain(rng, n, before, steps - 1, budget);
-    if (found) return { filled: found.filled, pieces: [...found.pieces, piece] };
+    if (found) return { filled: found.filled, pieces: [...found.pieces, piece], moves: [...found.moves, at] };
   }
   return null;
 }
@@ -161,14 +165,15 @@ export function shuffleBoard(rng: Rng, board: Board, wear: readonly number[]): {
 export interface Storm {
   board: Board;
   pieces: Piece[];
+  moves: Move[];
 }
 
 export function stormBoard(rng: Rng, board: Board): Storm | null {
   return runSteps(stormBoardSteps(rng, board));
 }
 
-export function* stormBoardSteps(rng: Rng, board: Board, steps = cfg.chainPieces): Generator<void, Storm | null> {
-  return yield* buildStorm(rng, board, steps, Math.round((cfg.budget * steps) / cfg.chainPieces));
+export function* stormBoardSteps(rng: Rng, board: Board, steps = cfg.chainPieces, clean = false): Generator<void, Storm | null> {
+  return yield* buildStorm(rng, board, steps, Math.round((cfg.budget * steps) / cfg.chainPieces), clean);
 }
 
 export function runSteps<T>(steps: Generator<void, T>): T {
@@ -178,14 +183,15 @@ export function runSteps<T>(steps: Generator<void, T>): T {
   }
 }
 
-function* buildStorm(rng: Rng, board: Board, steps: number, budget: number): Generator<void, Storm | null> {
+function* buildStorm(rng: Rng, board: Board, steps: number, budget: number, clean: boolean): Generator<void, Storm | null> {
   const n = board.size;
   const colors = board.cells.filter((v) => v !== 0);
   const target = Math.min(cfg.maxCells, Math.max(cfg.minCells, colors.length));
   let best: Plan | null = null;
   let bestGap = Infinity;
   for (let attempt = 0; attempt < cfg.attempts; attempt++) {
-    const plan = unclearChain(rng, n, seedBoard(rng, n), steps, { left: budget });
+    const start = clean ? new Array<boolean>(n * n).fill(false) : seedBoard(rng, n);
+    const plan = unclearChain(rng, n, start, steps, { left: budget });
     if (!plan) continue;
     const gap = Math.abs(plan.filled.filter(Boolean).length - target);
     if (gap < bestGap) {
@@ -201,5 +207,6 @@ function* buildStorm(rng: Rng, board: Board, steps: number, budget: number): Gen
   return {
     board: { size: n, cells: best.filled.map((v) => (v ? palette[c++ % palette.length] : 0)) },
     pieces: best.pieces,
+    moves: best.moves,
   };
 }

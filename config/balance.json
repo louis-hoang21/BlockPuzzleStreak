@@ -136,7 +136,7 @@
       "atStreak": [0, 5, 10],
       "pieces": [9, 7, 5]
     },
-    "starsLeft": [0.34, 0.67],
+    "starsCleared": [0.4, 0.7, 1],
     "burnChance": 0.06,
     "mixChance": 0.06,
     "levelEvery": 5,
@@ -151,7 +151,8 @@
       "extra": [12, 10, 8, 7, 6],
       "burn": [0, 0.03, 0.06, 0.07, 0.08],
       "mix": [0, 0, 0.04, 0.06, 0.08],
-      "minutes": [10, 8, 7, 6, 5]
+      "minutes": [10, 8, 7, 6, 5],
+      "hard": { "every": 6, "pieces": 9, "burn": 0.1, "mix": 0.1, "retries": 24 }
     }
   },
   "solvableSearchBudget": 20000,

@@ -6,7 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { STORM_PUZZLE_NAME } from '../core/modes';
-import { dayKey, loadPuzzle, mapKey } from '../core/stormPuzzle';
+import { dayKey, isHardLevel, loadPuzzle, mapKey } from '../core/stormPuzzle';
 import { hapticTap } from '../haptics';
 import { useT } from '../i18n';
 import { levelStars, loadMapRecords, nextLevel, totalStars, type MapRecords } from '../persistence/puzzleMap';
@@ -31,6 +31,8 @@ const OPEN = '#3DCB4A';
 const OPEN_EDGE = '#1E8A2B';
 const LOCKED = '#B9A58C';
 const LOCKED_EDGE = '#8A7660';
+const CROWN = '#FFC21A';
+const CROWN_SIZE = 20;
 
 export function StormMapScreen() {
   const insets = useSafeAreaInsets();
@@ -147,6 +149,8 @@ export function StormMapScreen() {
             const locked = level > current;
             const isCurrent = level === current;
             const size = isCurrent ? CURRENT : NODE;
+            const hard = isHardLevel(level);
+            const name = hard ? tr(`Hard level ${level}`, `Màn khó ${level}`) : tr(`Level ${level}`, `Màn ${level}`);
             return (
               <View key={level} style={[styles.slot, { left: nodeX(level) - CURRENT / 2, top: nodeY(level) - size / 2 }]}>
                 <Pressable
@@ -154,7 +158,7 @@ export function StormMapScreen() {
                   onPress={() => open(level)}
                   accessibilityRole="button"
                   accessibilityLabel={
-                    locked ? tr(`Level ${level}, locked`, `Màn ${level}, chưa mở`) : tr(`Level ${level}, ${stars} stars`, `Màn ${level}, ${stars} sao`)
+                    locked ? tr(`${name}, locked`, `${name}, chưa mở`) : tr(`${name}, ${stars} stars`, `${name}, ${stars} sao`)
                   }
                   style={({ pressed }) => [
                     styles.node,
@@ -175,9 +179,17 @@ export function StormMapScreen() {
                     <Text style={[styles.number, isCurrent && styles.currentNumber]}>{level}</Text>
                   )}
                 </Pressable>
+                {hard && (
+                  <SymbolView
+                    name="crown.fill"
+                    size={CROWN_SIZE}
+                    tintColor={CROWN}
+                    style={[styles.crown, { top: -CROWN_SIZE + 4, left: (CURRENT - CROWN_SIZE) / 2 }]}
+                  />
+                )}
                 {!locked && !isCurrent && (
                   <View style={styles.starRow}>
-                    <Stars count={stars} size={9} />
+                    <Stars count={stars} size={12} />
                   </View>
                 )}
                 {isCurrent && <Text style={[styles.play, { color: hud.text }]}>{tr('Play', 'Chơi')}</Text>}
@@ -235,6 +247,15 @@ const styles = StyleSheet.create({
   number: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   currentNumber: { fontSize: 15 },
   lock: { width: 11, height: 11 },
+  crown: {
+    position: 'absolute',
+    width: CROWN_SIZE,
+    height: CROWN_SIZE,
+    shadowColor: '#5A2E08',
+    shadowOpacity: 0.5,
+    shadowRadius: 1.5,
+    shadowOffset: { width: 0, height: 1 },
+  },
   starRow: { marginTop: 3 },
   play: { marginTop: 3, fontSize: 11, fontWeight: '900' },
 });

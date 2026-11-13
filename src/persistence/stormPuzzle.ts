@@ -4,7 +4,7 @@ import { readJson, writeJson } from './storage';
 const KEY = 'storm-puzzle';
 const RUN_KEY = 'storm-puzzle-run';
 const INTRO_KEY = 'storm-puzzle-intro';
-const INTRO_VERSION = 4;
+const INTRO_VERSION = 5;
 
 export interface PuzzleRecords {
   days: Record<string, number>;
