@@ -8,12 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { initSfx, playSfx } from '../audio/sfx';
 import {
   cachedPuzzle,
+  clearedPercent,
   dayKey,
   extraForStreak,
   levelsForStreak,
   loadPuzzle,
   minutesForStreak,
-  piecesLeft,
   puzzleFor,
   puzzleStars,
   withBudget,
@@ -36,6 +36,7 @@ import { hudColors, skinById, themeById } from '../render/theme';
 import { useSettingsStore } from '../store/settingsStore';
 import {
   clock,
+  endedText,
   endReason,
   howToPlay,
   INK,
@@ -46,6 +47,7 @@ import {
   PuzzleStage,
   puzzleRules,
   RESULT_DELAY_MS,
+  resultText,
   Stars,
   STAR,
   usePuzzleFx,
@@ -63,7 +65,7 @@ function prettyDay(day: string, lang: 'en' | 'vi'): string {
   return lang === 'en' ? `${MONTHS[Number(m) - 1].slice(0, 3)} ${Number(d)}, ${y}` : `${d}/${m}/${y}`;
 }
 
-type Outcome = { kind: 'lost' | 'level' | 'done'; reason: Reason; stars: number; left: number; seeds: number };
+type Outcome = { kind: 'lost' | 'level' | 'done'; reason: Reason; stars: number; percent: number };
 
 export function StormPuzzleScreen() {
   const insets = useSafeAreaInsets();
@@ -126,15 +128,14 @@ export function StormPuzzleScreen() {
       if (finished.current) return;
       finished.current = true;
       const stars = puzzleStars(current);
-      const left = piecesLeft(current);
-      const seeds = current.seeds.length;
+      const percent = clearedPercent(current);
       if (stars === 0) {
         hapticGameOver();
         playSfx('gameOver');
         const next = reshufflePuzzle(today);
         setVariant(next);
         prefetch(0, next);
-        setOutcome({ kind: 'lost', reason, stars: 0, left, seeds });
+        setOutcome({ kind: 'lost', reason, stars: 0, percent });
         return;
       }
       const all = [...levelStars, stars];
@@ -142,13 +143,13 @@ export function StormPuzzleScreen() {
       hapticCelebrate();
       if (all.length < levels) {
         playSfx('tieRecord');
-        setOutcome({ kind: 'level', reason, stars, left, seeds });
+        setOutcome({ kind: 'level', reason, stars, percent });
         return;
       }
       const dayStars = Math.min(...all);
       playSfx(dayStars === 3 ? 'newRecordWin' : 'tieRecord');
       setRecords(savePuzzleStars(today, dayStars));
-      setOutcome({ kind: 'done', reason, stars: dayStars, left, seeds });
+      setOutcome({ kind: 'done', reason, stars: dayStars, percent });
     },
     [levelStars, levels, prefetch, today],
   );
@@ -219,14 +220,7 @@ export function StormPuzzleScreen() {
   );
 
   const rules = puzzleRules(tr);
-  const ended =
-    outcome?.reason === 'stuck'
-      ? tr('No room left. ', 'Hết chỗ đặt. ')
-      : outcome?.reason === 'timeout'
-        ? tr("Time's up. ", 'Hết giờ. ')
-        : outcome?.reason === 'clear'
-          ? tr('All dotted blocks cleared! ', 'Đã phá hết khối có chấm! ')
-          : '';
+  const ended = outcome ? endedText(tr, outcome.reason) : '';
   const todayPlan = tr(
     `Streak ${streak} ${streak === 1 ? 'day' : 'days'} · today ${levels} ${levels === 1 ? 'level' : 'levels'}, ${minutes} min and ${extra} spare pieces each`,
     `Chuỗi ${streak} ngày · hôm nay ${levels} màn, mỗi màn ${minutes} phút và ${extra} khối dư`,
@@ -275,16 +269,11 @@ export function StormPuzzleScreen() {
           <Stars count={outcome.stars} size={34} />
           <Text style={kit.cardBody}>
             {outcome.kind === 'lost'
-              ? tr(
-                  `${outcome.seeds} dotted ${outcome.seeds === 1 ? 'block' : 'blocks'} left. Play again and the blocks will be rearranged.`,
-                  `Còn ${outcome.seeds} khối có chấm. Chơi lại, các khối sẽ được xếp lại.`,
-                )
+              ? resultText(tr, 0, outcome.percent) + tr(' Play again and the blocks will be rearranged.', ' Chơi lại, các khối sẽ được xếp lại.')
               : outcome.kind === 'level'
                 ? ended +
-                  tr(
-                    `${outcome.left} pieces to spare. ${levels - level - 1} more to earn today's stars.`,
-                    `Còn dư ${outcome.left} khối. Còn ${levels - level - 1} màn nữa để nhận sao hôm nay.`,
-                  )
+                  resultText(tr, outcome.stars, outcome.percent) +
+                  tr(` ${levels - level - 1} more to earn today's stars.`, ` Còn ${levels - level - 1} màn nữa để nhận sao hôm nay.`)
                 : outcome.stars === 3
                   ? tr('3 stars on every level. Perfect!', '3 sao mọi màn. Hoàn hảo!')
                   : ended + (levels > 1 ? tr(`Today's stars come from your lowest level. ${rules}`, `Sao hôm nay tính theo màn thấp nhất. ${rules}`) : rules)}
