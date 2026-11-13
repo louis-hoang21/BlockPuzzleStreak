@@ -1,6 +1,7 @@
 import {
   BlurMask,
   Canvas,
+  Circle,
   ClipOp,
   createPicture,
   Group,
@@ -35,6 +36,7 @@ import { pieceWear, wearOf } from '../core/spoil';
 import { Block } from './Block';
 import { EmptyCell } from './EmptyCell';
 import { BoltMark } from './BoltMark';
+import { FlameMark, MixMark } from './PuzzleMarks';
 import { GiftBow } from './GiftBow';
 import { BoardFrame } from './BoardFrame';
 import { RainbowWarmup } from './RainbowWarmup';
@@ -52,6 +54,12 @@ export interface ClearingCell {
 export interface StormWave {
   id: number;
   before: Board;
+}
+
+export interface FireEvent {
+  id: number;
+  from: number;
+  cells: number[];
 }
 
 export interface ClearEvent {
@@ -73,6 +81,12 @@ interface Shard {
   spin: number;
 }
 
+interface FlashTile {
+  x: number;
+  y: number;
+  color: string;
+}
+
 interface Props {
   layout: BoardLayout;
   board: Board;
@@ -82,6 +96,10 @@ interface Props {
   storm: StormWave | null;
   gift?: number;
   bolt?: number;
+  burn?: number;
+  mix?: number;
+  seeds?: readonly number[];
+  fire?: FireEvent | null;
   disabled: boolean;
   onDrop: (slot: number, row: number, col: number) => boolean;
   onRotate: (slot: number) => boolean;
@@ -130,6 +148,7 @@ const BURST_MS = 520;
 const FLASH_S = 0.1;
 const SHARD_LIFE_S = 0.4;
 const SHARDS_PER_CELL = 6;
+const SHARD_CAP = 120;
 const GRAVITY = 640;
 const RAINBOW_HOLD_S = 0.15;
 const RAINBOW_FADE_S = 0.2;
@@ -157,6 +176,101 @@ const WAVE_DEEP = '#2E8BD8';
 const WAVE_LIGHT = '#8FD3FF';
 const FOAM = '#FFFFFF';
 const GIFT_TWINKLE_MS = 600;
+const FIRE_DELAY_MS = 260;
+const FIRE_STEP_MS = 90;
+const FIRE_BURN_MS = 750;
+const FIRE_SPARKS = 7;
+const FIRE_HOT = '#FFF1A8';
+const FIRE_MID = '#FFB02E';
+const FIRE_EDGE = '#FF4A12';
+const FIRE_SMOKE = '#3A1A08';
+const SEED_DOT = '#FFFFFF';
+const SEED_RING = 'rgba(60, 30, 10, 0.55)';
+
+interface Spark {
+  x: number;
+  y: number;
+  start: number;
+  drift: number;
+  rise: number;
+  size: number;
+  wobble: number;
+}
+
+function FireSpread({ fire, n, cell, boardX, boardY }: { fire: FireEvent; n: number; cell: number; boardX: number; boardY: number }) {
+  const progress = useSharedValue(0);
+  const { burning, sparks, total } = useMemo(() => {
+    const rand = mulberry32(fire.id * 2246822519);
+    const fr = Math.floor(fire.from / n);
+    const fc = fire.from % n;
+    const burning = fire.cells.map((i) => {
+      const r = Math.floor(i / n);
+      const c = i % n;
+      return { x: boardX + c * cell, y: boardY + r * cell, start: FIRE_DELAY_MS + Math.max(Math.abs(r - fr), Math.abs(c - fc)) * FIRE_STEP_MS };
+    });
+    const sparks: Spark[] = [];
+    for (const b of burning) {
+      for (let k = 0; k < FIRE_SPARKS; k++) {
+        sparks.push({
+          x: b.x + cell * (0.2 + rand() * 0.6),
+          y: b.y + cell * (0.55 + rand() * 0.35),
+          start: b.start + rand() * FIRE_BURN_MS * 0.45,
+          drift: (rand() - 0.5) * cell * 0.5,
+          rise: cell * (0.7 + rand() * 0.9),
+          size: cell * (0.07 + rand() * 0.09),
+          wobble: rand() * Math.PI * 2,
+        });
+      }
+    }
+    const total = burning.reduce((m, b) => Math.max(m, b.start), 0) + FIRE_BURN_MS;
+    return { burning, sparks, total };
+  }, [fire, n, cell, boardX, boardY]);
+  useEffect(() => {
+    progress.value = 0;
+    progress.value = withTiming(1, { duration: total, easing: Easing.linear });
+  }, [fire, total, progress]);
+  const picture = useDerivedValue(() => {
+    const ms = progress.value * total;
+    return createPicture((canvas) => {
+      if (progress.value >= 1) return;
+      const paint = Skia.Paint();
+      for (const b of burning) {
+        const t = (ms - b.start) / FIRE_BURN_MS;
+        if (t <= 0 || t >= 1) continue;
+        const heat = t < 0.25 ? t / 0.25 : 1 - (t - 0.25) / 0.75;
+        const cx = b.x + cell / 2;
+        const cy = b.y + cell / 2;
+        paint.setShader(
+          Skia.Shader.MakeRadialGradient(
+            vec(cx, cy + cell * 0.1),
+            cell * 0.75,
+            [Skia.Color(FIRE_HOT), Skia.Color(FIRE_MID), Skia.Color(FIRE_EDGE), Skia.Color('rgba(255, 74, 18, 0)')],
+            [0, 0.35, 0.7, 1],
+            TileMode.Clamp,
+          ),
+        );
+        paint.setAlphaf(0.85 * heat);
+        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(b.x - cell * 0.15, b.y - cell * 0.15, cell * 1.3, cell * 1.3), cell * 0.4, cell * 0.4), paint);
+        paint.setShader(null);
+        paint.setColor(Skia.Color(FIRE_SMOKE));
+        paint.setAlphaf(0.35 * Math.min(1, t * 2) * (1 - t));
+        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(b.x + 2, b.y + 2, cell - 4, cell - 4), cell * 0.16, cell * 0.16), paint);
+      }
+      paint.setShader(null);
+      for (const sp of sparks) {
+        const t = (ms - sp.start) / FIRE_BURN_MS;
+        if (t <= 0 || t >= 1) continue;
+        const x = sp.x + sp.drift * t + Math.sin(sp.wobble + t * 9) * cell * 0.06;
+        const y = sp.y - sp.rise * t;
+        const r = sp.size * (1 - t * 0.6);
+        paint.setColor(Skia.Color(t < 0.3 ? FIRE_HOT : t < 0.65 ? FIRE_MID : FIRE_EDGE));
+        paint.setAlphaf(1 - t);
+        canvas.drawCircle(x, y, r, paint);
+      }
+    });
+  });
+  return <Picture picture={picture} />;
+}
 
 function JackpotBurst({
   clearing,
@@ -177,16 +291,19 @@ function JackpotBurst({
 }) {
   const clearProgress = useSharedValue(0);
   const frameFlash = useSharedValue(0);
-  const shards = useMemo(() => {
+  const { shards, tiles } = useMemo(() => {
     const rand = mulberry32(clearing.id * 2654435761);
     const unit = cell / 38;
-    const list: Shard[] = [];
+    const perCell = Math.max(2, Math.min(SHARDS_PER_CELL, Math.floor(SHARD_CAP / Math.max(1, clearing.cells.length))));
+    const shards: Shard[] = [];
+    const tiles: FlashTile[] = [];
     for (const { row, col, color } of clearing.cells) {
       const base = skin.colors[color % skin.colors.length].base;
-      for (let i = 0; i < SHARDS_PER_CELL; i++) {
+      tiles.push({ x: boardX + col * cell, y: boardY + row * cell, color: base });
+      for (let i = 0; i < perCell; i++) {
         const angle = rand() * Math.PI * 2;
         const speed = (80 + rand() * 160) * unit;
-        list.push({
+        shards.push({
           x: boardX + (col + 0.5) * cell,
           y: boardY + (row + 0.5) * cell,
           vx: Math.cos(angle) * speed,
@@ -198,7 +315,7 @@ function JackpotBurst({
         });
       }
     }
-    return list;
+    return { shards, tiles };
   }, [clearing, skin, cell, boardX, boardY]);
   const burstBoxes = useMemo(
     () => [
@@ -213,59 +330,44 @@ function JackpotBurst({
       frameFlash.value = withSequence(withTiming(1, { duration: 50 }), withTiming(0, { duration: 180 }));
     }
   }, [clearing, clearProgress, frameFlash]);
-  const clearOpacity = useDerivedValue(() => {
-    const t = (clearProgress.value * BURST_MS) / 1000;
-    return t < FLASH_S ? 1 : 0;
-  });
-  const flashOpacity = useDerivedValue(() => {
-    const t = (clearProgress.value * BURST_MS) / 1000;
-    return t < FLASH_S ? 1 - t / FLASH_S : 0;
-  });
   const burst = useDerivedValue(() => {
     const p = clearProgress.value;
     const t = (p * BURST_MS) / 1000;
     return createPicture((canvas) => {
       if (p >= 1) return;
+      const paint = Skia.Paint();
+      if (t < FLASH_S) {
+        const inset = 2;
+        const r = cell * 0.16;
+        for (const tile of tiles) {
+          const box = Skia.RRectXY(Skia.XYWHRect(tile.x + inset, tile.y + inset, cell - inset * 2, cell - inset * 2), r, r);
+          paint.setColor(Skia.Color(tile.color));
+          paint.setAlphaf(1);
+          canvas.drawRRect(box, paint);
+          paint.setColor(Skia.Color('#FFFFFF'));
+          paint.setAlphaf(1 - t / FLASH_S);
+          canvas.drawRRect(box, paint);
+        }
+      }
       const glow = t < RAINBOW_HOLD_S ? 1 : Math.max(0, 1 - (t - RAINBOW_HOLD_S) / RAINBOW_FADE_S);
       if (glow > 0) drawRainbowBoxes(canvas, burstBoxes, t, [boardX, boardY, boardSize, boardSize], cell, glow);
       const life = t - FLASH_S;
       if (life <= 0 || life >= SHARD_LIFE_S) return;
-      const paint = Skia.Paint();
+      const fall = 0.5 * GRAVITY * (cell / 38) * life * life;
       for (const sh of shards) {
         paint.setColor(Skia.Color(sh.color));
         paint.setAlphaf(1 - life / SHARD_LIFE_S);
-        const x = sh.x + sh.vx * life;
-        const y = sh.y + sh.vy * life + 0.5 * GRAVITY * (cell / 38) * life * life;
+        const half = sh.size / 2;
         canvas.save();
-        canvas.translate(x, y);
+        canvas.translate(sh.x + sh.vx * life, sh.y + sh.vy * life + fall);
         canvas.rotate(sh.rot + sh.spin * life, 0, 0);
-        canvas.drawRRect(Skia.RRectXY(Skia.XYWHRect(-sh.size / 2, -sh.size / 2, sh.size, sh.size), 2, 2), paint);
+        canvas.drawRect(Skia.XYWHRect(-half, -half, sh.size, sh.size), paint);
         canvas.restore();
       }
     });
   });
   return (
     <>
-      <Group opacity={clearOpacity}>
-        {clearing.cells.map(({ row, col, color }) => {
-          const x = boardX + col * cell;
-          const y = boardY + row * cell;
-          return (
-            <Group key={`${row}-${col}`}>
-              <Block x={x} y={y} size={cell} color={color} skin={skin} />
-              <RoundedRect
-                x={x + 2}
-                y={y + 2}
-                width={cell - 4}
-                height={cell - 4}
-                r={cell * 0.16}
-                color="white"
-                opacity={flashOpacity}
-              />
-            </Group>
-          );
-        })}
-      </Group>
       <Picture picture={burst} />
       <Group opacity={frameFlash}>
         <RoundedRect
@@ -370,14 +472,23 @@ function TrayPiece({
   return (
     <Group transform={transform}>
       <WornPiece cells={piece.cells} color={piece.color} size={cell} skin={skin} wears={piece.cells.map((_, k) => pieceWear(piece, k))} />
-      <PieceBolt piece={piece} size={cell} />
+      <PieceMarks piece={piece} size={cell} />
     </Group>
   );
 }
 
-function PieceBolt({ piece, size }: { piece: Piece; size: number }) {
-  const at = piece.bolt === undefined ? undefined : piece.cells[piece.bolt];
-  return at ? <BoltMark x={at[1] * size} y={at[0] * size} size={size} /> : null;
+function PieceMarks({ piece, size }: { piece: Piece; size: number }) {
+  const cellAt = (index: number | undefined) => (index === undefined ? undefined : piece.cells[index]);
+  const bolt = cellAt(piece.bolt);
+  const burn = cellAt(piece.burn);
+  const mix = cellAt(piece.mix);
+  return (
+    <>
+      {bolt && <BoltMark x={bolt[1] * size} y={bolt[0] * size} size={size} />}
+      {burn && <FlameMark x={burn[1] * size} y={burn[0] * size} size={size} />}
+      {mix && <MixMark x={mix[1] * size} y={mix[0] * size} size={size} />}
+    </>
+  );
 }
 
 function TrayGhost({
@@ -412,7 +523,7 @@ function TrayGhost({
   return (
     <Group transform={transform} opacity={opacity}>
       <WornPiece cells={piece.cells} color={piece.color} size={cell} skin={skin} wears={piece.cells.map((_, k) => pieceWear(piece, k))} />
-      <PieceBolt piece={piece} size={cell} />
+      <PieceMarks piece={piece} size={cell} />
     </Group>
   );
 }
@@ -472,6 +583,10 @@ function GameBoardView({
   storm,
   gift,
   bolt,
+  burn,
+  mix,
+  seeds,
+  fire,
   disabled,
   onDrop,
   onRotate,
@@ -495,7 +610,9 @@ function GameBoardView({
   const twinkle = useSharedValue(1);
   const hasGift = gift !== undefined && board.cells[gift] !== 0;
   const hasBolt = bolt !== undefined && board.cells[bolt] !== 0;
-  const sparkling = hasGift || hasBolt;
+  const hasBurn = burn !== undefined && board.cells[burn] !== 0;
+  const hasMix = mix !== undefined && board.cells[mix] !== 0;
+  const sparkling = hasGift || hasBolt || hasBurn || hasMix;
   useEffect(() => {
     if (!sparkling) return;
     twinkle.value = withRepeat(withSequence(withTiming(0.25, { duration: GIFT_TWINKLE_MS }), withTiming(1, { duration: GIFT_TWINKLE_MS })), -1);
@@ -866,11 +983,25 @@ function GameBoardView({
         <RainbowWarmup x={boardX} y={boardY} w={boardSize} h={boardSize} cell={cell} pad={framePad} />
         <BoardFrame x={boardX} y={boardY} width={boardSize} height={boardSize} pad={framePad} theme={theme} />
         {cells}
+        {seeds?.map((i) =>
+          board.cells[i] === 0 ? null : (
+            <Group key={`seed-${i}`}>
+              <Circle cx={boardX + (i % n + 0.5) * cell} cy={boardY + (Math.floor(i / n) + 0.5) * cell} r={cell * 0.13} color={SEED_RING} />
+              <Circle cx={boardX + (i % n + 0.5) * cell} cy={boardY + (Math.floor(i / n) + 0.5) * cell} r={cell * 0.08} color={SEED_DOT} />
+            </Group>
+          ),
+        )}
         {hasGift && (
           <GiftBow x={boardX + (gift % n) * cell} y={boardY + Math.floor(gift / n) * cell} size={cell} twinkle={twinkle} />
         )}
         {hasBolt && (
           <BoltMark x={boardX + (bolt % n) * cell} y={boardY + Math.floor(bolt / n) * cell} size={cell} twinkle={twinkle} />
+        )}
+        {hasBurn && (
+          <FlameMark x={boardX + (burn % n) * cell} y={boardY + Math.floor(burn / n) * cell} size={cell} twinkle={twinkle} />
+        )}
+        {hasMix && (
+          <MixMark x={boardX + (mix % n) * cell} y={boardY + Math.floor(mix / n) * cell} size={cell} twinkle={twinkle} />
         )}
         {oldCells && <Group clip={oldClip}>{oldCells}</Group>}
         <Picture picture={wave} />
@@ -906,6 +1037,8 @@ function GameBoardView({
             framePad={framePad}
           />
         )}
+
+        {fire && <FireSpread key={`fire-${fire.id}`} fire={fire} n={n} cell={cell} boardX={boardX} boardY={boardY} />}
 
         <RoundedRect
           x={trayX}

@@ -135,12 +135,13 @@ function shuffle<T>(rng: Rng, items: readonly T[]): T[] {
   return out;
 }
 
-export function shuffleBoard(rng: Rng, board: Board, wear: readonly number[]): { board: Board; wear: number[] } {
+export function shuffleBoard(rng: Rng, board: Board, wear: readonly number[]): { board: Board; wear: number[]; source: number[] } {
   const n = board.size;
   const from = shuffle(rng, board.cells.flatMap((v, i) => (v !== 0 ? [i] : [])));
   const filled = new Array<boolean>(n * n).fill(false);
   const cells = new Array<number>(n * n).fill(0);
   const moved = new Array<number>(n * n).fill(0);
+  const source = new Array<number>(n * n).fill(-1);
   const spots = shuffle(rng, Array.from({ length: n * n }, (_, i) => i));
   let c = 0;
   for (const i of spots) {
@@ -151,9 +152,10 @@ export function shuffleBoard(rng: Rng, board: Board, wear: readonly number[]): {
       continue;
     }
     moved[i] = wear[from[c]];
+    source[i] = from[c];
     cells[i] = board.cells[from[c++]];
   }
-  return { board: { size: n, cells }, wear: moved };
+  return { board: { size: n, cells }, wear: moved, source };
 }
 
 export interface Storm {
@@ -165,8 +167,8 @@ export function stormBoard(rng: Rng, board: Board): Storm | null {
   return runSteps(stormBoardSteps(rng, board));
 }
 
-export function* stormBoardSteps(rng: Rng, board: Board): Generator<void, Storm | null> {
-  return yield* buildStorm(rng, board, cfg.chainPieces, cfg.budget);
+export function* stormBoardSteps(rng: Rng, board: Board, steps = cfg.chainPieces): Generator<void, Storm | null> {
+  return yield* buildStorm(rng, board, steps, Math.round((cfg.budget * steps) / cfg.chainPieces));
 }
 
 export function runSteps<T>(steps: Generator<void, T>): T {

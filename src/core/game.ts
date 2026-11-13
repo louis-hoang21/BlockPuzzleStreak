@@ -156,7 +156,7 @@ function heartRect(before: Board, after: Board, pieceCells: number): CellRect | 
   return solidRect(before) ? null : rect;
 }
 
-function giftBlast(board: Board, gift: number | undefined, full: Lines): GiftBlast | undefined {
+export function giftBlast(board: Board, gift: number | undefined, full: Lines): GiftBlast | undefined {
   if (gift === undefined || board.cells[gift] === 0) return undefined;
   const n = board.size;
   const row = Math.floor(gift / n);
@@ -168,12 +168,12 @@ function giftBlast(board: Board, gift: number | undefined, full: Lines): GiftBla
   return { row, col, rows: around(row), cols: around(col) };
 }
 
-function pickGift(rng: () => number, board: Board, skip?: number): number | undefined {
+export function pickGift(rng: () => number, board: Board, skip?: number): number | undefined {
   const filled = board.cells.flatMap((v, i) => (v !== 0 && i !== skip ? [i] : []));
   return filled.length > 0 ? filled[Math.floor(rng() * filled.length)] : undefined;
 }
 
-function boltStrike(board: Board, bolt: number | undefined, cleared: Lines): BoltStrike | undefined {
+export function boltStrike(board: Board, bolt: number | undefined, cleared: Lines): BoltStrike | undefined {
   if (bolt === undefined || board.cells[bolt] === 0) return undefined;
   const n = board.size;
   const row = Math.floor(bolt / n);
@@ -184,12 +184,12 @@ function boltStrike(board: Board, bolt: number | undefined, cleared: Lines): Bol
   return { row, col, rows: byCol && !byRow ? [row] : [], cols: byRow && !byCol ? [col] : [] };
 }
 
-function placedBolt(piece: Piece, n: number, row: number, col: number): number | undefined {
+export function placedBolt(piece: Piece, n: number, row: number, col: number): number | undefined {
   const cell = piece.bolt === undefined ? undefined : piece.cells[piece.bolt];
   return cell ? (row + cell[0]) * n + col + cell[1] : undefined;
 }
 
-function boltSet(rng: () => number, tray: readonly Piece[], busy: boolean): Piece[] {
+export function boltSet(rng: () => number, tray: readonly Piece[], busy: boolean): Piece[] {
   const roll = rng();
   const slot = Math.floor(rng() * tray.length);
   const pick = rng();

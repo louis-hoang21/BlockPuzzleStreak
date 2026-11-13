@@ -1,5 +1,5 @@
 import { Circle, Group, LinearGradient, Rect, RoundedRect, rect, rrect, Skia, vec } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import type { BoardTheme } from './theme';
 
@@ -10,7 +10,7 @@ interface Props {
   theme: BoardTheme;
 }
 
-export function EmptyCell({ x, y, size, theme }: Props) {
+function EmptyCellView({ x, y, size, theme }: Props) {
   const inset = Math.max(0.5, size * 0.015);
   const s = size - inset * 2;
   const x0 = x + inset;
@@ -59,3 +59,5 @@ function SunsetCell({ x0, y0, s, r }: { x0: number; y0: number; s: number; r: nu
     </Group>
   );
 }
+
+export const EmptyCell = memo(EmptyCellView);

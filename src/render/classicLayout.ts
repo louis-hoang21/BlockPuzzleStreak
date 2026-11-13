@@ -14,6 +14,8 @@ export interface ClassicLayout {
   sideCell: number;
   holdY: number;
   nextY: number;
+  nextBoxH: number;
+  speedY: number;
   boxH: number;
   labelH: number;
 }
@@ -40,6 +42,8 @@ export function computeClassicLayout(width: number, height: number): ClassicLayo
   const boxH = sideCell * 3;
   const holdY = boardY + labelH;
   const nextY = holdY + boxH + 16 + labelH;
+  const nextBoxH = sideCell * 2.6;
+  const speedY = nextY - framePad / 2 + nextBoxH * cfg.preview + framePad + 10;
   return {
     width,
     height,
@@ -54,6 +58,8 @@ export function computeClassicLayout(width: number, height: number): ClassicLayo
     sideCell,
     holdY,
     nextY,
+    nextBoxH,
+    speedY,
     boxH,
     labelH,
   };

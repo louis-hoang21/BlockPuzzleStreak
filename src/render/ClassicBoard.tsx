@@ -278,7 +278,7 @@ function ClassicBurst({
 }
 
 function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
-  const { cell, boardX, boardY, boardW, boardH, framePad, sideX, sideW, sideCell, holdY, nextY, boxH } = layout;
+  const { cell, boardX, boardY, boardW, boardH, framePad, sideX, sideW, sideCell, holdY, nextY, nextBoxH, boxH } = layout;
   const { cols, hidden } = state;
   const yOf = (row: number) => boardY + (row - hidden) * cell;
 
@@ -360,8 +360,6 @@ function ClassicBoardView({ layout, state, clearing, theme, skin }: Props) {
       : null;
   const activeBoltCell = active && (state.activeBolt ?? -1) >= 0 ? activeCells[state.activeBolt ?? 0] : undefined;
   const queueBolts = state.queueBolts ?? [];
-
-  const nextBoxH = sideCell * 2.6;
 
   return (
     <Canvas style={{ width: layout.width, height: layout.height }}>

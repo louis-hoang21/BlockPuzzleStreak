@@ -1,5 +1,5 @@
-import { StormPuzzleScreen } from '../../ui/StormPuzzleScreen';
+import { StormMapScreen } from '../../ui/StormMapScreen';
 
 export default function StormPuzzleRoute() {
-  return <StormPuzzleScreen />;
+  return <StormMapScreen />;
 }

@@ -11,6 +11,8 @@ export interface Piece {
   age?: number;
   aged?: number[];
   bolt?: number;
+  burn?: number;
+  mix?: number;
 }
 
 function difficultyAt(score: number): number {

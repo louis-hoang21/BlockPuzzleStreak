@@ -11,7 +11,7 @@ import {
   vec,
   type SkPath,
 } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import type { Shape } from '../core/pieces';
 import type { BlockColor, Skin } from './theme';
@@ -26,7 +26,7 @@ interface BlockProps {
   worn?: boolean;
 }
 
-export function Block({ x, y, size, color, skin, opacity = 1, worn = false }: BlockProps) {
+function BlockView({ x, y, size, color, skin, opacity = 1, worn = false }: BlockProps) {
   const c = skin.colors[color % skin.colors.length];
   const inset = size * 0.015;
   const s = size - inset * 2;
@@ -399,3 +399,5 @@ export function PieceBlocks({ cells, color, size, skin, opacity }: PieceProps) {
     </>
   );
 }
+
+export const Block = memo(BlockView);

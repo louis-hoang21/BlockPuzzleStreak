@@ -3,6 +3,8 @@ import { readJson, writeJson } from './storage';
 
 const KEY = 'storm-puzzle';
 const RUN_KEY = 'storm-puzzle-run';
+const INTRO_KEY = 'storm-puzzle-intro';
+const INTRO_VERSION = 4;
 
 export interface PuzzleRecords {
   days: Record<string, number>;
@@ -41,4 +43,12 @@ export function reshufflePuzzle(day: string): number {
   const variant = puzzleVariant(day) + 1;
   writeJson(RUN_KEY, { day, variant });
   return variant;
+}
+
+export function puzzleIntroSeen(): boolean {
+  return readJson<{ version: number }>(INTRO_KEY, { version: 0 }).version >= INTRO_VERSION;
+}
+
+export function markPuzzleIntroSeen() {
+  writeJson(INTRO_KEY, { version: INTRO_VERSION });
 }

@@ -8,7 +8,8 @@ import { initSfx } from '../audio/sfx';
 import { CLASSIC_ENABLED, CLASSIC_NAME, MODES, STORM_PUZZLE_NAME } from '../core/modes';
 import { hapticTap } from '../haptics';
 import { useT } from '../i18n';
-import { dayKey, loadPuzzle } from '../core/stormPuzzle';
+import { dayKey, loadPuzzle, mapKey } from '../core/stormPuzzle';
+import { loadMapRecords, nextLevel } from '../persistence/puzzleMap';
 import { puzzleVariant } from '../persistence/stormPuzzle';
 import { MODE_BUTTON_COLORS, ModeButton } from '../ui/ModeButton';
 
@@ -23,8 +24,14 @@ function loadTodayPuzzle() {
   return loadPuzzle({ day, level: 0, variant: puzzleVariant(day) });
 }
 
+function loadMapPuzzle() {
+  return loadPuzzle(mapKey(nextLevel(loadMapRecords())));
+}
+
 async function warmUp() {
   initSfx();
+  await nextTick();
+  await loadMapPuzzle();
   await nextTick();
   await loadTodayPuzzle();
   await nextTick();
@@ -93,7 +100,7 @@ export default function WelcomeScreen() {
               <ModeButton
                 label={tr(STORM_PUZZLE_NAME)}
                 colors={MODE_BUTTON_COLORS.orange}
-                onPress={() => openMode('/game/storm-puzzle', loadTodayPuzzle)}
+                onPress={() => openMode('/game/storm-puzzle', loadMapPuzzle)}
               />
               {CLASSIC_ENABLED && (
                 <ModeButton label={tr(CLASSIC_NAME)} colors={MODE_BUTTON_COLORS.blue} onPress={() => openMode('/game/classic')} />

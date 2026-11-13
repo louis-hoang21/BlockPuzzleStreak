@@ -22,6 +22,7 @@ import {
   type ClassicState,
   type Step,
 } from '../core/classic/engine';
+import { gravityMs } from '../core/classic/scoring';
 import { stageColor } from '../core/stages';
 import { hapticCelebrate, hapticClear, hapticCombo, hapticPlace, hapticTap, hapticWarning } from '../haptics';
 import { t, useT } from '../i18n';
@@ -67,6 +68,7 @@ const GIFT_SFX_DELAY_MS = 120;
 const BOLT_SECONDS = Math.round(cfg.bolt.durationMs / 1000);
 const rushSeconds = (s: ClassicState) => Math.ceil((s.rushMs ?? 0) / 1000);
 const rushLabel = (s: ClassicState) => rushSpeed(s.rushMs ?? 0).toFixed(1);
+const fallSpeed = (s: ClassicState) => ((1000 / gravityMs(s.level)) * rushSpeed(s.rushMs ?? 0)).toFixed(1);
 const MAX_FRAME_MS = 100;
 const SOFT_DROP_CELLS = 0.6;
 const HARD_DROP_VELOCITY = 700;
@@ -493,6 +495,24 @@ export function ClassicScreen() {
               >
                 {tr('Next', 'Tiếp theo')}
               </Text>
+              <View
+                pointerEvents="none"
+                accessibilityLabel={tr(`Fall speed ${fallSpeed(view)} rows per second`, `Tốc độ rơi ${fallSpeed(view)} ô mỗi giây`)}
+                style={[styles.speed, { left: layout.sideX, top: layout.speedY, width: layout.sideW }]}
+              >
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.speedLabel, { color: hud.textDim }]}>
+                  {tr('Speed', 'Tốc độ')}
+                </Text>
+                <View style={styles.speedRow}>
+                  {rushSeconds(view) > 0 && <SymbolView name="bolt.fill" size={12} tintColor="#FFD43B" style={styles.speedIcon} />}
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.speedValue, { color: hud.text }]}>
+                    {fallSpeed(view)}
+                  </Text>
+                </View>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.speedUnit, { color: hud.textDim }]}>
+                  {tr('rows/s', 'ô/giây')}
+                </Text>
+              </View>
             </Animated.View>
           </GestureDetector>
         )}
@@ -773,6 +793,12 @@ const styles = StyleSheet.create({
   controlPressed: { backgroundColor: 'rgba(60, 70, 140, 0.9)' },
   controlIcon: { width: 22, height: 22 },
   sideLabel: { position: 'absolute', textAlign: 'center', fontSize: 13, fontWeight: '800' },
+  speed: { position: 'absolute', alignItems: 'center' },
+  speedLabel: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  speedRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
+  speedIcon: { width: 12, height: 12 },
+  speedValue: { fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  speedUnit: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
   rush: { position: 'absolute', alignItems: 'center' },
   rushPill: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { Circle, FillType, Group, Oval, Path, RoundedRect, Skia } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import type { Shape } from '../core/pieces';
 import { ageOf, SPOIL_AT, turnsLeft, wearOf } from '../core/spoil';
@@ -38,7 +38,7 @@ interface Props {
   wear?: number;
 }
 
-export function WornBlock({ x, y, size, color, skin, wear }: Props) {
+function WornBlockView({ x, y, size, color, skin, wear }: Props) {
   const state = wearOf(wear);
   const crack = useMemo(() => (state === 'cracked' ? crackPaths(x, y, size) : null), [state, x, y, size]);
   if (state === 'fresh') return <Block x={x} y={y} size={size} color={color} skin={skin} />;
@@ -205,3 +205,5 @@ function Marks({ x, y, size, kind }: { x: number; y: number; size: number; kind:
     }
   }
 }
+
+export const WornBlock = memo(WornBlockView);
